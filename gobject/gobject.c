@@ -3226,7 +3226,7 @@ g_clear_object (volatile GObject **object_ptr)
  * This function gets back user data pointers stored via
  * g_object_set_qdata().
  * 
- * Returns: (transfer none): The user data pointer set, or %NULL
+ * Returns: (transfer none) (nullable): The user data pointer set, or %NULL
  */
 gpointer
 g_object_get_qdata (GObject *object,
@@ -3241,7 +3241,7 @@ g_object_get_qdata (GObject *object,
  * g_object_set_qdata: (skip)
  * @object: The GObject to set store a user data pointer
  * @quark: A #GQuark, naming the user data pointer
- * @data: An opaque user data pointer
+ * @data: (nullable): An opaque user data pointer
  *
  * This sets an opaque, named pointer on an object.
  * The name is specified through a #GQuark (retrived e.g. via
@@ -3267,8 +3267,8 @@ g_object_set_qdata (GObject *object,
  * g_object_dup_qdata:
  * @object: the #GObject to store user data on
  * @quark: a #GQuark, naming the user data pointer
- * @dup_func: (allow-none): function to dup the value
- * @user_data: (allow-none): passed as user_data to @dup_func
+ * @dup_func: (nullable): function to dup the value
+ * @user_data: (nullable): passed as user_data to @dup_func
  *
  * This is a variant of g_object_get_qdata() which returns
  * a 'duplicate' of the value. @dup_func defines the
@@ -3308,10 +3308,10 @@ g_object_dup_qdata (GObject        *object,
  * g_object_replace_qdata:
  * @object: the #GObject to store user data on
  * @quark: a #GQuark, naming the user data pointer
- * @oldval: (allow-none): the old value to compare against
- * @newval: (allow-none): the new value
- * @destroy: (allow-none): a destroy notify for the new value
- * @old_destroy: (allow-none): destroy notify for the existing value
+ * @oldval: (nullable): the old value to compare against
+ * @newval: (nullable): the new value
+ * @destroy: (nullable): a destroy notify for the new value
+ * @old_destroy: (out) (optional): destroy notify for the existing value
  *
  * Compares the user data for the key @quark on @object with
  * @oldval, and if they are the same, replaces @oldval with
@@ -3352,8 +3352,8 @@ g_object_replace_qdata (GObject        *object,
  * g_object_set_qdata_full: (skip)
  * @object: The GObject to set store a user data pointer
  * @quark: A #GQuark, naming the user data pointer
- * @data: An opaque user data pointer
- * @destroy: Function to invoke with @data as argument, when @data
+ * @data: (nullable): An opaque user data pointer
+ * @destroy: (nullable): Function to invoke with @data as argument, when @data
  *           needs to be freed
  *
  * This function works like g_object_set_qdata(), but in addition,
@@ -3416,7 +3416,7 @@ g_object_set_qdata_full (GObject       *object,
  * and thus the partial string list would have been freed upon
  * g_object_set_qdata_full().
  *
- * Returns: (transfer full): The user data pointer set, or %NULL
+ * Returns: (transfer full) (nullable): The user data pointer set, or %NULL
  */
 gpointer
 g_object_steal_qdata (GObject *object,
@@ -3435,7 +3435,8 @@ g_object_steal_qdata (GObject *object,
  * 
  * Gets a named field from the objects table of associations (see g_object_set_data()).
  * 
- * Returns: (transfer none): the data if found, or %NULL if no such data exists.
+ * Returns: (transfer none) (nullable): the data if found,
+ *          or %NULL if no such data exists.
  */
 gpointer
 g_object_get_data (GObject     *object,
@@ -3451,7 +3452,7 @@ g_object_get_data (GObject     *object,
  * g_object_set_data:
  * @object: #GObject containing the associations.
  * @key: name of the key
- * @data: data to associate with that key
+ * @data: (nullable): data to associate with that key
  *
  * Each object carries around a table of associations from
  * strings to pointers.  This function lets you set an association.
@@ -3474,8 +3475,8 @@ g_object_set_data (GObject     *object,
  * g_object_dup_data:
  * @object: the #GObject to store user data on
  * @key: a string, naming the user data pointer
- * @dup_func: (allow-none): function to dup the value
- * @user_data: (allow-none): passed as user_data to @dup_func
+ * @dup_func: (nullable): function to dup the value
+ * @user_data: (nullable): passed as user_data to @dup_func
  *
  * This is a variant of g_object_get_data() which returns
  * a 'duplicate' of the value. @dup_func defines the
@@ -3517,10 +3518,10 @@ g_object_dup_data (GObject        *object,
  * g_object_replace_data:
  * @object: the #GObject to store user data on
  * @key: a string, naming the user data pointer
- * @oldval: (allow-none): the old value to compare against
- * @newval: (allow-none): the new value
- * @destroy: (allow-none): a destroy notify for the new value
- * @old_destroy: (allow-none): destroy notify for the existing value
+ * @oldval: (nullable): the old value to compare against
+ * @newval: (nullable): the new value
+ * @destroy: (nullable): a destroy notify for the new value
+ * @old_destroy: (out) (optional): destroy notify for the existing value
  *
  * Compares the user data for the key @key on @object with
  * @oldval, and if they are the same, replaces @oldval with
@@ -3562,8 +3563,8 @@ g_object_replace_data (GObject        *object,
  * g_object_set_data_full: (skip)
  * @object: #GObject containing the associations
  * @key: name of the key
- * @data: data to associate with that key
- * @destroy: function to call when the association is destroyed
+ * @data: (nullable): data to associate with that key
+ * @destroy: (nullable): function to call when the association is destroyed
  *
  * Like g_object_set_data() except it adds notification
  * for when the association is destroyed, either by setting it
@@ -3592,7 +3593,8 @@ g_object_set_data_full (GObject       *object,
  * Remove a specified datum from the object's data associations,
  * without invoking the association's destroy handler.
  *
- * Returns: (transfer full): the data if found, or %NULL if no such data exists.
+ * Returns: (transfer full) (nullable): the data if found, or %NULL
+ *          if no such data exists.
  */
 gpointer
 g_object_steal_data (GObject     *object,
