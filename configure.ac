@@ -125,6 +125,8 @@ case "$host" in
   *-*-mingw*)
     glib_native_win32=yes
     glib_pid_type='void *'
+    glib_dir_separator='\\'
+    glib_searchpath_separator=';'
     glib_cv_stack_grows=no
     # Unfortunately the mingw implementations of C99-style snprintf and vsnprintf
     # don't seem to be quite good enough, at least not in mingw-runtime-3.14.
@@ -146,6 +148,8 @@ case "$host" in
   *)
     glib_native_win32=no
     glib_pid_type=int
+    glib_dir_separator='/'
+    glib_searchpath_separator=':'
     ;;
 esac
 case $host in
@@ -3048,6 +3052,11 @@ typedef $g_pid_type GPid;
 #define GLIB_SYSDEF_MSG_PEEK $g_msg_peek
 #define GLIB_SYSDEF_MSG_DONTROUTE $g_msg_dontroute
 
+#define G_DIR_SEPARATOR '$g_dir_separator'
+#define G_DIR_SEPARATOR_S "$g_dir_separator"
+#define G_SEARCHPATH_SEPARATOR '$g_searchpath_separator'
+#define G_SEARCHPATH_SEPARATOR_S "$g_searchpath_separator"
+
 G_END_DECLS
 
 #endif /* __GLIBCONFIG_H__ */
@@ -3333,6 +3342,8 @@ g_memory_barrier_needed="$glib_memory_barrier_needed"
 g_gcc_atomic_ops="$glib_cv_gcc_has_builtin_atomic_operations"
 
 g_module_suffix="$glib_gmodule_suffix"
+g_dir_separator="$glib_dir_separator"
+g_searchpath_separator="$glib_searchpath_separator"
 
 g_pid_type="$glib_pid_type"
 case $host in
