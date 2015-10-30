@@ -2537,6 +2537,13 @@
  * Since: 2.44
  */
 
+/**
+ * G_POLLFD_FORMAT:
+ *
+ * A format specifier that can be used in printf()-style format strings
+ * when printing the @fd member of a #GPollFD.
+ */
+
 /* Windows Compatibility Functions {{{1 */
 
 /**
