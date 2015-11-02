@@ -883,7 +883,7 @@ g_sequence_sort_iter (GSequence                *seq,
   seq->access_prohibited = TRUE;
   tmp->access_prohibited = TRUE;
 
-  while (g_sequence_get_length (tmp) > 0)
+  while (!g_sequence_is_empty (tmp))
     {
       GSequenceNode *node = g_sequence_get_begin_iter (tmp);
 
@@ -1231,7 +1231,9 @@ g_sequence_set (GSequenceIter *iter,
  * g_sequence_get_length:
  * @seq: a #GSequence
  *
- * Returns the length of @seq
+ * Returns the length of @seq. Note that this method is O(h) where `h' is the
+ * height of the tree. It is thus more efficient to use g_sequence_is_empty()
+ * when comparing the length to zero.
  *
  * Returns: the length of @seq
  *

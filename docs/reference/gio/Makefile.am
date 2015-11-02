@@ -13,10 +13,11 @@ SCAN_OPTIONS=--deprecated-guards="G_DISABLE_DEPRECATED" \
              --ignore-decorators="G_GNUC_WARN_UNUSED_RESULT"
 
 # The directory containing the source code. Relative to $(srcdir)
-DOC_SOURCE_DIR=$(top_srcdir)/gio
+DOC_SOURCE_DIR =$(top_srcdir)/gio $(top_builddir)/gio
 
-BUILT_HFILES=gioenumtypes.h
-HFILE_GLOB=$(top_srcdir)/gio/*.h
+HFILE_GLOB= \
+    $(top_srcdir)/gio/*.h \
+    $(top_builddir)/gio/gioenumtypes.h
 CFILE_GLOB=$(top_srcdir)/gio/*.c
 
 IGNORE_HFILES = \
@@ -126,6 +127,22 @@ HTML_IMAGES =			\
 	menu-example.png	\
 	menu-model.png
 
+example_files = \
+	gdbus-example-objectmanager.xml \
+	gdbus-example-objectmanager-server.c \
+	gdbus-example-objectmanager-client.c \
+	gdbus-example-objectmanager-generated-org.gtk.GDBus.Example.ObjectManager.Animal.xml \
+	gdbus-example-objectmanager-generated-org.gtk.GDBus.Example.ObjectManager.Cat.xml \
+	$(NULL)
+
+gdbus-example-objectmanager.xml: %: $(top_srcdir)/gio/tests/gdbus-object-manager-example/%
+gdbus-example-objectmanager-server.c: %: $(top_srcdir)/gio/tests/%
+gdbus-example-objectmanager-client.c: %: $(top_srcdir)/gio/tests/%
+gdbus-example-objectmanager-generated-org.gtk.GDBus.Example.ObjectManager.Animal.xml: %: $(top_builddir)/gio/tests/gdbus-object-manager-example/%
+gdbus-example-objectmanager-generated-org.gtk.GDBus.Example.ObjectManager.Cat.xml: %: $(top_builddir)/gio/tests/gdbus-object-manager-example/%
+$(example_files):
+	cp $< $@
+
 content_files =			\
 	version.xml		\
 	overview.xml		\
@@ -141,6 +158,7 @@ content_files =			\
 	gresource.xml		\
 	gdbus.xml		\
 	gdbus-codegen.xml	\
+	$(example_files)	\
 	$(NULL)
 
 expand_content_files =		\
@@ -192,7 +210,7 @@ XSLTPROC_FLAGS = \
 endif
 
 CLEANFILES ?=
-CLEANFILES += $(man_MANS)
+CLEANFILES += $(man_MANS) $(example_files)
 
 EXTRA_DIST += $(man_MANS)
 
