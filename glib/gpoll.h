@@ -101,6 +101,14 @@ struct _GPollFD
   gushort 	revents;
 };
 
+/**
+ * G_POLLFD_FORMAT:
+ *
+ * A format specifier that can be used in printf()-style format strings
+ * when printing the @fd member of a #GPollFD.
+ */
+/* defined in glibconfig.h */
+
 GLIB_AVAILABLE_IN_ALL
 gint
 g_poll (GPollFD *fds,
