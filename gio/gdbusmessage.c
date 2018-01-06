@@ -5,7 +5,7 @@
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
+ * version 2.1 of the License, or (at your option) any later version.
  *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -32,6 +32,8 @@
 #include <sys/mkdev.h>
 #elif MAJOR_IN_SYSMACROS
 #include <sys/sysmacros.h>
+#else
+#define MAJOR_MINOR_NOT_FOUND 1
 #endif
 
 #include "gdbusutils.h"
@@ -474,7 +476,7 @@ enum
   PROP_LOCKED
 };
 
-G_DEFINE_TYPE (GDBusMessage, g_dbus_message, G_TYPE_OBJECT);
+G_DEFINE_TYPE (GDBusMessage, g_dbus_message, G_TYPE_OBJECT)
 
 static void
 g_dbus_message_finalize (GObject *object)
@@ -580,9 +582,9 @@ g_dbus_message_new (void)
 
 /**
  * g_dbus_message_new_method_call:
- * @name: (allow-none): A valid D-Bus name or %NULL.
+ * @name: (nullable): A valid D-Bus name or %NULL.
  * @path: A valid object path.
- * @interface_: (allow-none): A valid D-Bus interface name or %NULL.
+ * @interface_: (nullable): A valid D-Bus interface name or %NULL.
  * @method: A valid method name.
  *
  * Creates a new #GDBusMessage for a method call.
@@ -999,7 +1001,7 @@ g_dbus_message_get_header (GDBusMessage             *message,
  * g_dbus_message_set_header:
  * @message: A #GDBusMessage.
  * @header_field: A 8-bit unsigned integer (typically a value from the #GDBusMessageHeaderField enumeration)
- * @value: (allow-none): A #GVariant to set the header field or %NULL to clear the header field.
+ * @value: (nullable): A #GVariant to set the header field or %NULL to clear the header field.
  *
  * Sets a header field on @message.
  *
@@ -1162,7 +1164,7 @@ g_dbus_message_get_unix_fd_list (GDBusMessage  *message)
 /**
  * g_dbus_message_set_unix_fd_list:
  * @message: A #GDBusMessage.
- * @fd_list: (allow-none): A #GUnixFDList or %NULL.
+ * @fd_list: (nullable): A #GUnixFDList or %NULL.
  *
  * Sets the UNIX file descriptors associated with @message. As a
  * side-effect the %G_DBUS_MESSAGE_HEADER_FIELD_NUM_UNIX_FDS header
@@ -1366,7 +1368,7 @@ read_string (GMemoryBuffer  *mbuf,
       g_set_error (error,
                    G_IO_ERROR,
                    G_IO_ERROR_INVALID_ARGUMENT,
-                   _("Expected NUL byte after the string '%s' but found byte %d"),
+                   _("Expected NUL byte after the string “%s” but found byte %d"),
                    str, mbuf->data[mbuf->pos + len]);
       g_free (str);
       mbuf->pos += len + 1;
@@ -1386,7 +1388,7 @@ read_string (GMemoryBuffer  *mbuf,
                    G_IO_ERROR,
                    G_IO_ERROR_INVALID_ARGUMENT,
                    _("Expected valid UTF-8 string but found invalid bytes at byte offset %d (length of string is %d). "
-                     "The valid UTF-8 string up until that point was '%s'"),
+                     "The valid UTF-8 string up until that point was “%s”"),
                    offset,
                    (gint) len,
                    valid_str);
@@ -1438,7 +1440,9 @@ parse_value_from_blob (GMemoryBuffer       *buf,
 {
   GVariant *ret;
   GError *local_error;
+#ifdef DEBUG_SERIALIZER
   gboolean is_leaf;
+#endif /* DEBUG_SERIALIZER */
   const gchar *type_string;
 
   type_string = g_variant_type_peek_string (type);
@@ -1451,14 +1455,16 @@ parse_value_from_blob (GMemoryBuffer       *buf,
                indent, "",
                just_align ? "Aligning" : "Reading",
                s,
-               (gint) g_seekable_tell (G_SEEKABLE (buf)));
+               (gint) buf->pos);
       g_free (s);
     }
 #endif /* DEBUG_SERIALIZER */
 
   ret = NULL;
 
+#ifdef DEBUG_SERIALIZER
   is_leaf = TRUE;
+#endif /* DEBUG_SERIALIZER */
   local_error = NULL;
   switch (type_string[0])
     {
@@ -1584,7 +1590,7 @@ parse_value_from_blob (GMemoryBuffer       *buf,
               g_set_error (&local_error,
                            G_IO_ERROR,
                            G_IO_ERROR_INVALID_ARGUMENT,
-                           _("Parsed value '%s' is not a valid D-Bus object path"),
+                           _("Parsed value “%s” is not a valid D-Bus object path"),
                            v);
               goto fail;
             }
@@ -1606,7 +1612,7 @@ parse_value_from_blob (GMemoryBuffer       *buf,
               g_set_error (&local_error,
                            G_IO_ERROR,
                            G_IO_ERROR_INVALID_ARGUMENT,
-                           _("Parsed value '%s' is not a valid D-Bus signature"),
+                           _("Parsed value “%s” is not a valid D-Bus signature"),
                        v);
               goto fail;
             }
@@ -1641,8 +1647,8 @@ parse_value_from_blob (GMemoryBuffer       *buf,
 
           array_len = g_memory_buffer_read_uint32 (buf);
 
-          is_leaf = FALSE;
 #ifdef DEBUG_SERIALIZER
+          is_leaf = FALSE;
           g_print (": array spans 0x%04x bytes\n", array_len);
 #endif /* DEBUG_SERIALIZER */
 
@@ -1673,7 +1679,7 @@ parse_value_from_blob (GMemoryBuffer       *buf,
                   g_set_error (&local_error,
                                G_IO_ERROR,
                                G_IO_ERROR_INVALID_ARGUMENT,
-                               _("Encountered array of type 'a%c', expected to have a length a multiple "
+                               _("Encountered array of type “a%c”, expected to have a length a multiple "
                                  "of %u bytes, but found to be %u bytes in length"),
                                g_variant_type_peek_string (element_type)[0], fixed_size, array_len);
                   goto fail;
@@ -1749,8 +1755,8 @@ parse_value_from_blob (GMemoryBuffer       *buf,
 
           ensure_input_padding (buf, 8);
 
-          is_leaf = FALSE;
 #ifdef DEBUG_SERIALIZER
+          is_leaf = FALSE;
           g_print ("\n");
 #endif /* DEBUG_SERIALIZER */
 
@@ -1784,8 +1790,8 @@ parse_value_from_blob (GMemoryBuffer       *buf,
         {
           ensure_input_padding (buf, 8);
 
-          is_leaf = FALSE;
 #ifdef DEBUG_SERIALIZER
+          is_leaf = FALSE;
           g_print ("\n");
 #endif /* DEBUG_SERIALIZER */
 
@@ -1819,8 +1825,8 @@ parse_value_from_blob (GMemoryBuffer       *buf,
         }
       else if (g_variant_type_is_variant (type))
         {
-          is_leaf = FALSE;
 #ifdef DEBUG_SERIALIZER
+          is_leaf = FALSE;
           g_print ("\n");
 #endif /* DEBUG_SERIALIZER */
 
@@ -1840,7 +1846,7 @@ parse_value_from_blob (GMemoryBuffer       *buf,
                   g_set_error (&local_error,
                                G_IO_ERROR,
                                G_IO_ERROR_INVALID_ARGUMENT,
-                               _("Parsed value '%s' for variant is not a valid D-Bus signature"),
+                               _("Parsed value “%s” for variant is not a valid D-Bus signature"),
                                sig);
                   goto fail;
                 }
@@ -1864,7 +1870,7 @@ parse_value_from_blob (GMemoryBuffer       *buf,
           g_set_error (&local_error,
                        G_IO_ERROR,
                        G_IO_ERROR_INVALID_ARGUMENT,
-                       _("Error deserializing GVariant with type string '%s' from the D-Bus wire format"),
+                       _("Error deserializing GVariant with type string “%s” from the D-Bus wire format"),
                        s);
           g_free (s);
           goto fail;
@@ -1892,8 +1898,6 @@ parse_value_from_blob (GMemoryBuffer       *buf,
           g_free (s);
         }
     }
-#else
-  is_leaf = is_leaf; /* To avoid -Wunused-but-set-variable */
 #endif /* DEBUG_SERIALIZER */
 
   /* sink the reference, if floating */
@@ -2048,7 +2052,7 @@ g_dbus_message_new_from_blob (guchar                *blob,
       g_set_error (error,
                    G_IO_ERROR,
                    G_IO_ERROR_INVALID_ARGUMENT,
-                   _("Invalid endianness value. Expected 0x6c ('l') or 0x42 ('B') but found value 0x%02x"),
+                   _("Invalid endianness value. Expected 0x6c (“l”) or 0x42 (“B”) but found value 0x%02x"),
                    endianness);
       goto out;
     }
@@ -2117,7 +2121,7 @@ g_dbus_message_new_from_blob (guchar                *blob,
           g_set_error (error,
                        G_IO_ERROR,
                        G_IO_ERROR_INVALID_ARGUMENT,
-                       _("Signature header with signature '%s' found but message body is empty"),
+                       _("Signature header with signature “%s” found but message body is empty"),
                        signature_str);
           goto out;
         }
@@ -2131,7 +2135,7 @@ g_dbus_message_new_from_blob (guchar                *blob,
               g_set_error (error,
                            G_IO_ERROR,
                            G_IO_ERROR_INVALID_ARGUMENT,
-                           _("Parsed value '%s' is not a valid D-Bus signature (for body)"),
+                           _("Parsed value “%s” is not a valid D-Bus signature (for body)"),
                            signature_str);
               goto out;
             }
@@ -2512,7 +2516,7 @@ append_value_to_blob (GVariant            *value,
           g_set_error (error,
                        G_IO_ERROR,
                        G_IO_ERROR_INVALID_ARGUMENT,
-                       _("Error serializing GVariant with type string '%s' to the D-Bus wire format"),
+                       _("Error serializing GVariant with type string “%s” to the D-Bus wire format"),
                        g_variant_get_type_string (value));
           goto fail;
         }
@@ -2701,7 +2705,7 @@ g_dbus_message_to_blob (GDBusMessage          *message,
           g_set_error (error,
                        G_IO_ERROR,
                        G_IO_ERROR_INVALID_ARGUMENT,
-                       _("Message body has signature '%s' but there is no signature header"),
+                       _("Message body has signature “%s” but there is no signature header"),
                        signature_str);
           g_free (tupled_signature_str);
           goto out;
@@ -2711,7 +2715,7 @@ g_dbus_message_to_blob (GDBusMessage          *message,
           g_set_error (error,
                        G_IO_ERROR,
                        G_IO_ERROR_INVALID_ARGUMENT,
-                       _("Message body has type signature '%s' but signature in the header field is '%s'"),
+                       _("Message body has type signature “%s” but signature in the header field is “%s”"),
                        tupled_signature_str, g_variant_get_type_string (message->body));
           g_free (tupled_signature_str);
           goto out;
@@ -2727,7 +2731,7 @@ g_dbus_message_to_blob (GDBusMessage          *message,
           g_set_error (error,
                        G_IO_ERROR,
                        G_IO_ERROR_INVALID_ARGUMENT,
-                       _("Message body is empty but signature in the header field is '(%s)'"),
+                       _("Message body is empty but signature in the header field is “(%s)”"),
                        signature_str);
           goto out;
         }
@@ -3280,7 +3284,7 @@ g_dbus_message_to_gerror (GDBusMessage   *message,
               g_dbus_error_set_dbus_error (error,
                                            error_name,
                                            "",
-                                           _("Error return with body of type '%s'"),
+                                           _("Error return with body of type “%s”"),
                                            g_variant_get_type_string (body));
             }
           else
@@ -3444,6 +3448,7 @@ g_dbus_message_print (GDBusMessage *message,
     {
       g_string_append_printf (str, "%*s  (none)\n", indent, "");
     }
+  g_list_free (keys);
   g_string_append_printf (str, "%*sBody: ", indent, "");
   if (message->body != NULL)
     {
@@ -3474,18 +3479,22 @@ g_dbus_message_print (GDBusMessage *message,
               fs = g_string_new (NULL);
               if (fstat (fds[n], &statbuf) == 0)
                 {
+#ifndef MAJOR_MINOR_NOT_FOUND                       
                   g_string_append_printf (fs, "%s" "dev=%d:%d", fs->len > 0 ? "," : "",
-                                          major (statbuf.st_dev), minor (statbuf.st_dev));
+                                          (gint) major (statbuf.st_dev), (gint) minor (statbuf.st_dev));
+#endif                  
                   g_string_append_printf (fs, "%s" "mode=0%o", fs->len > 0 ? "," : "",
-                                          statbuf.st_mode);
+                                          (guint) statbuf.st_mode);
                   g_string_append_printf (fs, "%s" "ino=%" G_GUINT64_FORMAT, fs->len > 0 ? "," : "",
                                           (guint64) statbuf.st_ino);
                   g_string_append_printf (fs, "%s" "uid=%u", fs->len > 0 ? "," : "",
                                           (guint) statbuf.st_uid);
                   g_string_append_printf (fs, "%s" "gid=%u", fs->len > 0 ? "," : "",
                                           (guint) statbuf.st_gid);
+#ifndef MAJOR_MINOR_NOT_FOUND                     
                   g_string_append_printf (fs, "%s" "rdev=%d:%d", fs->len > 0 ? "," : "",
-                                          major (statbuf.st_rdev), minor (statbuf.st_rdev));
+                                          (gint) major (statbuf.st_rdev), (gint) minor (statbuf.st_rdev));
+#endif                  
                   g_string_append_printf (fs, "%s" "size=%" G_GUINT64_FORMAT, fs->len > 0 ? "," : "",
                                           (guint64) statbuf.st_size);
                   g_string_append_printf (fs, "%s" "atime=%" G_GUINT64_FORMAT, fs->len > 0 ? "," : "",
@@ -3497,7 +3506,8 @@ g_dbus_message_print (GDBusMessage *message,
                 }
               else
                 {
-                  g_string_append_printf (fs, "(fstat failed: %s)", strerror (errno));
+                  int errsv = errno;
+                  g_string_append_printf (fs, "(fstat failed: %s)", g_strerror (errsv));
                 }
               g_string_append_printf (str, "%*s  fd %d: %s\n", indent, "", fds[n], fs->str);
               g_string_free (fs, TRUE);

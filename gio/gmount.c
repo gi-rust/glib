@@ -7,7 +7,7 @@
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
+ * version 2.1 of the License, or (at your option) any later version.
  *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -54,9 +54,9 @@
  * g_mount_unmount_with_operation() with (at least) the #GMount instance and a
  * #GAsyncReadyCallback.  The callback will be fired when the
  * operation has resolved (either with success or failure), and a
- * #GAsyncReady structure will be passed to the callback.  That
+ * #GAsyncResult structure will be passed to the callback.  That
  * callback should then call g_mount_unmount_with_operation_finish() with the #GMount
- * and the #GAsyncReady data to see if the operation was completed
+ * and the #GAsyncResult data to see if the operation was completed
  * successfully.  If an @error is present when g_mount_unmount_with_operation_finish() 
  * is called, then it will be filled with any error information.
  **/
@@ -101,8 +101,11 @@ g_mount_default_init (GMountInterface *iface)
    * GMount::pre-unmount:
    * @mount: the object on which the signal is emitted
    *
-   * This signal is emitted when the #GMount is about to be
+   * This signal may be emitted when the #GMount is about to be
    * unmounted.
+   *
+   * This signal depends on the backend and is only emitted if
+   * GIO was used to unmount.
    *
    * Since: 2.22
    **/
@@ -319,7 +322,7 @@ g_mount_get_drive (GMount *mount)
  * g_mount_can_unmount: 
  * @mount: a #GMount.
  * 
- * Checks if @mount can be mounted.
+ * Checks if @mount can be unmounted.
  * 
  * Returns: %TRUE if the @mount can be unmounted.
  **/
@@ -339,7 +342,7 @@ g_mount_can_unmount (GMount *mount)
  * g_mount_can_eject: 
  * @mount: a #GMount.
  * 
- * Checks if @mount can be eject.
+ * Checks if @mount can be ejected.
  * 
  * Returns: %TRUE if the @mount can be ejected.
  **/
@@ -359,8 +362,8 @@ g_mount_can_eject (GMount *mount)
  * g_mount_unmount:
  * @mount: a #GMount.
  * @flags: flags affecting the operation
- * @cancellable: (allow-none): optional #GCancellable object, %NULL to ignore.
- * @callback: (allow-none): a #GAsyncReadyCallback, or %NULL.
+ * @cancellable: (nullable): optional #GCancellable object, %NULL to ignore.
+ * @callback: (nullable): a #GAsyncReadyCallback, or %NULL.
  * @user_data: user data passed to @callback.
  * 
  * Unmounts a mount. This is an asynchronous operation, and is 
@@ -390,7 +393,7 @@ g_mount_unmount (GMount              *mount,
                                /* Translators: This is an error
                                 * message for mount objects that
                                 * don't implement unmount. */
-                               _("mount doesn't implement \"unmount\""));
+                               _("mount doesn’t implement “unmount”"));
       return;
     }
   
@@ -435,8 +438,8 @@ g_mount_unmount_finish (GMount        *mount,
  * g_mount_eject:
  * @mount: a #GMount.
  * @flags: flags affecting the unmount if required for eject
- * @cancellable: (allow-none): optional #GCancellable object, %NULL to ignore.
- * @callback: (allow-none): a #GAsyncReadyCallback, or %NULL.
+ * @cancellable: (nullable): optional #GCancellable object, %NULL to ignore.
+ * @callback: (nullable): a #GAsyncReadyCallback, or %NULL.
  * @user_data: user data passed to @callback.
  * 
  * Ejects a mount. This is an asynchronous operation, and is 
@@ -466,7 +469,7 @@ g_mount_eject (GMount              *mount,
                                /* Translators: This is an error
                                 * message for mount objects that
                                 * don't implement eject. */
-                               _("mount doesn't implement \"eject\""));
+                               _("mount doesn’t implement “eject”"));
       return;
     }
   
@@ -510,10 +513,10 @@ g_mount_eject_finish (GMount        *mount,
  * g_mount_unmount_with_operation:
  * @mount: a #GMount.
  * @flags: flags affecting the operation
- * @mount_operation: (allow-none): a #GMountOperation or %NULL to avoid
+ * @mount_operation: (nullable): a #GMountOperation or %NULL to avoid
  *     user interaction.
- * @cancellable: (allow-none): optional #GCancellable object, %NULL to ignore.
- * @callback: (allow-none): a #GAsyncReadyCallback, or %NULL.
+ * @cancellable: (nullable): optional #GCancellable object, %NULL to ignore.
+ * @callback: (nullable): a #GAsyncReadyCallback, or %NULL.
  * @user_data: user data passed to @callback.
  *
  * Unmounts a mount. This is an asynchronous operation, and is
@@ -544,7 +547,7 @@ g_mount_unmount_with_operation (GMount              *mount,
                                /* Translators: This is an error
                                 * message for mount objects that
                                 * don't implement any of unmount or unmount_with_operation. */
-                               _("mount doesn't implement \"unmount\" or \"unmount_with_operation\""));
+                               _("mount doesn’t implement “unmount” or “unmount_with_operation”"));
       return;
     }
 
@@ -595,10 +598,10 @@ g_mount_unmount_with_operation_finish (GMount        *mount,
  * g_mount_eject_with_operation:
  * @mount: a #GMount.
  * @flags: flags affecting the unmount if required for eject
- * @mount_operation: (allow-none): a #GMountOperation or %NULL to avoid
+ * @mount_operation: (nullable): a #GMountOperation or %NULL to avoid
  *     user interaction.
- * @cancellable: (allow-none): optional #GCancellable object, %NULL to ignore.
- * @callback: (allow-none): a #GAsyncReadyCallback, or %NULL.
+ * @cancellable: (nullable): optional #GCancellable object, %NULL to ignore.
+ * @callback: (nullable): a #GAsyncReadyCallback, or %NULL.
  * @user_data: user data passed to @callback.
  *
  * Ejects a mount. This is an asynchronous operation, and is
@@ -629,7 +632,7 @@ g_mount_eject_with_operation (GMount              *mount,
                                /* Translators: This is an error
                                 * message for mount objects that
                                 * don't implement any of eject or eject_with_operation. */
-                               _("mount doesn't implement \"eject\" or \"eject_with_operation\""));
+                               _("mount doesn’t implement “eject” or “eject_with_operation”"));
       return;
     }
 
@@ -679,10 +682,10 @@ g_mount_eject_with_operation_finish (GMount        *mount,
  * g_mount_remount:
  * @mount: a #GMount.
  * @flags: flags affecting the operation
- * @mount_operation: (allow-none): a #GMountOperation or %NULL to avoid
+ * @mount_operation: (nullable): a #GMountOperation or %NULL to avoid
  *     user interaction.
- * @cancellable: (allow-none): optional #GCancellable object, %NULL to ignore.
- * @callback: (allow-none): a #GAsyncReadyCallback, or %NULL.
+ * @cancellable: (nullable): optional #GCancellable object, %NULL to ignore.
+ * @callback: (nullable): a #GAsyncReadyCallback, or %NULL.
  * @user_data: user data passed to @callback.
  * 
  * Remounts a mount. This is an asynchronous operation, and is 
@@ -717,7 +720,7 @@ g_mount_remount (GMount              *mount,
                                /* Translators: This is an error
                                 * message for mount objects that
                                 * don't implement remount. */
-                               _("mount doesn't implement \"remount\""));
+                               _("mount doesn’t implement “remount”"));
       return;
     }
   
@@ -760,7 +763,7 @@ g_mount_remount_finish (GMount        *mount,
  * @mount: a #GMount
  * @force_rescan: Whether to force a rescan of the content. 
  *     Otherwise a cached result will be used if available
- * @cancellable: (allow-none): optional #GCancellable object, %NULL to ignore
+ * @cancellable: (nullable): optional #GCancellable object, %NULL to ignore
  * @callback: a #GAsyncReadyCallback
  * @user_data: user data passed to @callback
  * 
@@ -799,7 +802,7 @@ g_mount_guess_content_type (GMount              *mount,
                                /* Translators: This is an error
                                 * message for mount objects that
                                 * don't implement content type guessing. */
-                               _("mount doesn't implement content type guessing"));
+                               _("mount doesn’t implement content type guessing"));
       return;
     }
   
@@ -848,7 +851,7 @@ g_mount_guess_content_type_finish (GMount        *mount,
  * @mount: a #GMount
  * @force_rescan: Whether to force a rescan of the content.
  *     Otherwise a cached result will be used if available
- * @cancellable: (allow-none): optional #GCancellable object, %NULL to ignore
+ * @cancellable: (nullable): optional #GCancellable object, %NULL to ignore
  * @error: a #GError location to store the error occurring, or %NULL to
  *     ignore
  *
@@ -886,7 +889,7 @@ g_mount_guess_content_type_sync (GMount              *mount,
                            /* Translators: This is an error
                             * message for mount objects that
                             * don't implement content type guessing. */
-                           _("mount doesn't implement synchronous content type guessing"));
+                           _("mount doesn’t implement synchronous content type guessing"));
 
       return NULL;
     }

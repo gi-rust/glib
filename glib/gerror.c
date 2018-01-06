@@ -4,7 +4,7 @@
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
+ * version 2.1 of the License, or (at your option) any later version.
  *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -124,8 +124,10 @@
  * foo_open_file (GError **error)
  * {
  *   gint fd;
+ *   int saved_errno;
  *
  *   fd = open ("file.txt", O_RDONLY);
+ *   saved_errno = errno;
  *
  *   if (fd < 0)
  *     {
@@ -133,7 +135,7 @@
  *                    FOO_ERROR,                 // error domain
  *                    FOO_ERROR_BLAH,            // error code
  *                    "Failed to open file: %s", // error message format string
- *                    g_strerror (errno));
+ *                    g_strerror (saved_errno));
  *       return -1;
  *     }
  *   else
@@ -341,22 +343,19 @@
  *   g_set_error() will complain if you pile up errors.
  *
  * - By convention, if you return a boolean value indicating success
- *   then %TRUE means success and %FALSE means failure.
- *   <footnote><para>Avoid creating functions which have a boolean
- *   return value and a GError parameter, but where the boolean does
- *   something other than signal whether the GError is set.  Among other
- *   problems, it requires C callers to allocate a temporary error.  Instead,
- *   provide a "gboolean *" out parameter. There are functions in GLib
- *   itself such as g_key_file_has_key() that are deprecated because of this.
- *   </para></footnote>
- *   If %FALSE is
- *   returned, the error must be set to a non-%NULL value.
- *   <footnote><para>One exception to this is that in situations that are
- *   already considered to be undefined behaviour (such as when a
+ *   then %TRUE means success and %FALSE means failure. Avoid creating
+ *   functions which have a boolean return value and a GError parameter,
+ *   but where the boolean does something other than signal whether the
+ *   GError is set.  Among other problems, it requires C callers to allocate
+ *   a temporary error.  Instead, provide a "gboolean *" out parameter.
+ *   There are functions in GLib itself such as g_key_file_has_key() that
+ *   are deprecated because of this. If %FALSE is returned, the error must
+ *   be set to a non-%NULL value.  One exception to this is that in situations
+ *   that are already considered to be undefined behaviour (such as when a
  *   g_return_val_if_fail() check fails), the error need not be set.
  *   Instead of checking separately whether the error is set, callers
  *   should ensure that they do not provoke undefined behaviour, then
- *   assume that the error will be set on failure.</para></footnote>
+ *   assume that the error will be set on failure.
  *
  * - A %NULL return value is also frequently used to mean that an error
  *   occurred. You should make clear in your documentation whether %NULL
@@ -666,7 +665,7 @@ g_propagate_error (GError **dest,
  * g_clear_error:
  * @err: a #GError return location
  *
- * If @err is %NULL, does nothing. If @err is non-%NULL,
+ * If @err or *@err is %NULL, does nothing. Otherwise,
  * calls g_error_free() on *@err and sets *@err to %NULL.
  */
 void
@@ -706,8 +705,7 @@ g_error_add_prefix (gchar       **string,
  * nothing.
  *
  * If *@err is %NULL (ie: an error variable is present but there is no
- * error condition) then also do nothing. Whether or not it makes sense
- * to take advantage of this feature is up to you.
+ * error condition) then also do nothing.
  *
  * Since: 2.16
  */

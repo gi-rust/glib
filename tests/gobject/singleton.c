@@ -4,7 +4,7 @@
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
+ * version 2.1 of the License, or (at your option) any later version.
  *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -35,7 +35,7 @@ static GType my_singleton_get_type (void);
 #define MY_IS_SINGLETON_CLASS(c)  (G_TYPE_CHECK_CLASS_TYPE ((c), MY_TYPE_SINGLETON))
 #define MY_SINGLETON_GET_CLASS(o) (G_TYPE_INSTANCE_GET_CLASS ((o), MY_TYPE_SINGLETON, MySingletonClass))
 
-G_DEFINE_TYPE (MySingleton, my_singleton, G_TYPE_OBJECT);
+G_DEFINE_TYPE (MySingleton, my_singleton, G_TYPE_OBJECT)
 
 static MySingleton *the_one_and_only = NULL;
 
@@ -46,7 +46,7 @@ my_singleton_constructor (GType                  type,
                           GObjectConstructParam *construct_properties)
 {
   if (the_one_and_only)
-    return g_object_ref (the_one_and_only);
+    return g_object_ref (G_OBJECT (the_one_and_only));
   else
     return G_OBJECT_CLASS (my_singleton_parent_class)->constructor (type, n_construct_properties, construct_properties);
 }

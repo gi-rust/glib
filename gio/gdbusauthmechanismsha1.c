@@ -5,7 +5,7 @@
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
+ * version 2.1 of the License, or (at your option) any later version.
  *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -255,12 +255,13 @@ ensure_keyring_directory (GError **error)
           struct stat statbuf;
           if (stat (path, &statbuf) != 0)
             {
+              int errsv = errno;
               g_set_error (error,
                            G_IO_ERROR,
-                           g_io_error_from_errno (errno),
-                           _("Error when getting information for directory '%s': %s"),
+                           g_io_error_from_errno (errsv),
+                           _("Error when getting information for directory “%s”: %s"),
                            path,
-                           strerror (errno));
+                           g_strerror (errsv));
               g_free (path);
               path = NULL;
               goto out;
@@ -270,9 +271,9 @@ ensure_keyring_directory (GError **error)
               g_set_error (error,
                            G_IO_ERROR,
                            G_IO_ERROR_FAILED,
-                           _("Permissions on directory '%s' are malformed. Expected mode 0700, got 0%o"),
+                           _("Permissions on directory “%s” are malformed. Expected mode 0700, got 0%o"),
                            path,
-                           statbuf.st_mode & 0777);
+                           (guint) (statbuf.st_mode & 0777));
               g_free (path);
               path = NULL;
               goto out;
@@ -283,17 +284,18 @@ ensure_keyring_directory (GError **error)
 #endif
 #endif
         }
-        goto out;
+      goto out;
     }
 
   if (g_mkdir (path, 0700) != 0)
     {
+      int errsv = errno;
       g_set_error (error,
                    G_IO_ERROR,
-                   g_io_error_from_errno (errno),
-                   _("Error creating directory '%s': %s"),
+                   g_io_error_from_errno (errsv),
+                   _("Error creating directory “%s”: %s"),
                    path,
-                   strerror (errno));
+                   g_strerror (errsv));
       g_free (path);
       path = NULL;
       goto out;
@@ -374,7 +376,7 @@ keyring_lookup_entry (const gchar  *cookie_context,
                             error))
     {
       g_prefix_error (error,
-                      _("Error opening keyring '%s' for reading: "),
+                      _("Error opening keyring “%s” for reading: "),
                       path);
       goto out;
     }
@@ -387,7 +389,6 @@ keyring_lookup_entry (const gchar  *cookie_context,
       gchar **tokens;
       gchar *endp;
       gint line_id;
-      guint64 line_when;
 
       if (line[0] == '\0')
         continue;
@@ -398,7 +399,7 @@ keyring_lookup_entry (const gchar  *cookie_context,
           g_set_error (error,
                        G_IO_ERROR,
                        G_IO_ERROR_FAILED,
-                       _("Line %d of the keyring at '%s' with content '%s' is malformed"),
+                       _("Line %d of the keyring at “%s” with content “%s” is malformed"),
                        n + 1,
                        path,
                        line);
@@ -412,7 +413,7 @@ keyring_lookup_entry (const gchar  *cookie_context,
           g_set_error (error,
                        G_IO_ERROR,
                        G_IO_ERROR_FAILED,
-                       _("First token of line %d of the keyring at '%s' with content '%s' is malformed"),
+                       _("First token of line %d of the keyring at “%s” with content “%s” is malformed"),
                        n + 1,
                        path,
                        line);
@@ -420,14 +421,13 @@ keyring_lookup_entry (const gchar  *cookie_context,
           goto out;
         }
 
-      line_when = g_ascii_strtoll (tokens[1], &endp, 10);
-      line_when = line_when; /* To avoid -Wunused-but-set-variable */
+      (void)g_ascii_strtoll (tokens[1], &endp, 10); /* do not care what the timestamp is */
       if (*endp != '\0')
         {
           g_set_error (error,
                        G_IO_ERROR,
                        G_IO_ERROR_FAILED,
-                       _("Second token of line %d of the keyring at '%s' with content '%s' is malformed"),
+                       _("Second token of line %d of the keyring at “%s” with content “%s” is malformed"),
                        n + 1,
                        path,
                        line);
@@ -451,7 +451,7 @@ keyring_lookup_entry (const gchar  *cookie_context,
   g_set_error (error,
                G_IO_ERROR,
                G_IO_ERROR_FAILED,
-               _("Didn't find cookie with id %d in the keyring at '%s'"),
+               _("Didn’t find cookie with id %d in the keyring at “%s”"),
                cookie_id,
                path);
 
@@ -488,7 +488,10 @@ keyring_acquire_lock (const gchar  *path,
   gchar *lock;
   gint ret;
   guint num_tries;
+#ifdef EEXISTS
   guint num_create_tries;
+#endif
+  int errsv;
 
   g_return_val_if_fail (path != NULL, FALSE);
   g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
@@ -509,8 +512,8 @@ keyring_acquire_lock (const gchar  *path,
    *         real locking implementations are still flaky on network filesystems
    */
 
-  num_create_tries = 0;
 #ifdef EEXISTS
+  num_create_tries = 0;
  again:
 #endif
   num_tries = 0;
@@ -526,12 +529,13 @@ keyring_acquire_lock (const gchar  *path,
            */
           if (g_unlink (lock) != 0)
             {
+              errsv = errno;
               g_set_error (error,
                            G_IO_ERROR,
-                           g_io_error_from_errno (errno),
-                           _("Error deleting stale lock file '%s': %s"),
+                           g_io_error_from_errno (errsv),
+                           _("Error deleting stale lock file “%s”: %s"),
                            lock,
-                           strerror (errno));
+                           g_strerror (errsv));
               goto out;
             }
           _log ("Deleted stale lock file '%s'", lock);
@@ -546,24 +550,24 @@ keyring_acquire_lock (const gchar  *path,
                 0,
 #endif
                 0700);
+  errsv = errno;
   if (ret == -1)
     {
 #ifdef EEXISTS
       /* EEXIST: pathname already exists and O_CREAT and O_EXCL were used. */
-      if (errno == EEXISTS)
+      if (errsv == EEXISTS)
         {
           num_create_tries++;
           if (num_create_tries < 5)
             goto again;
         }
 #endif
-      num_create_tries = num_create_tries; /* To avoid -Wunused-but-set-variable */
       g_set_error (error,
                    G_IO_ERROR,
-                   g_io_error_from_errno (errno),
-                   _("Error creating lock file '%s': %s"),
+                   g_io_error_from_errno (errsv),
+                   _("Error creating lock file “%s”: %s"),
                    lock,
-                   strerror (errno));
+                   g_strerror (errsv));
       goto out;
     }
 
@@ -588,22 +592,24 @@ keyring_release_lock (const gchar  *path,
   lock = g_strdup_printf ("%s.lock", path);
   if (close (lock_fd) != 0)
     {
+      int errsv = errno;
       g_set_error (error,
                    G_IO_ERROR,
-                   g_io_error_from_errno (errno),
-                   _("Error closing (unlinked) lock file '%s': %s"),
+                   g_io_error_from_errno (errsv),
+                   _("Error closing (unlinked) lock file “%s”: %s"),
                    lock,
-                   strerror (errno));
+                   g_strerror (errsv));
       goto out;
     }
   if (g_unlink (lock) != 0)
     {
+      int errsv = errno;
       g_set_error (error,
                    G_IO_ERROR,
-                   g_io_error_from_errno (errno),
-                   _("Error unlinking lock file '%s': %s"),
+                   g_io_error_from_errno (errsv),
+                   _("Error unlinking lock file “%s”: %s"),
                    lock,
-                   strerror (errno));
+                   g_strerror (errsv));
       goto out;
     }
 
@@ -678,7 +684,7 @@ keyring_generate_entry (const gchar  *cookie_context,
         {
           g_propagate_prefixed_error (error,
                                       local_error,
-                                      _("Error opening keyring '%s' for writing: "),
+                                      _("Error opening keyring “%s” for writing: "),
                                       path);
           goto out;
         }
@@ -711,7 +717,7 @@ keyring_generate_entry (const gchar  *cookie_context,
               g_set_error (error,
                            G_IO_ERROR,
                            G_IO_ERROR_FAILED,
-                           _("Line %d of the keyring at '%s' with content '%s' is malformed"),
+                           _("Line %d of the keyring at “%s” with content “%s” is malformed"),
                            n + 1,
                            path,
                            line);
@@ -725,7 +731,7 @@ keyring_generate_entry (const gchar  *cookie_context,
               g_set_error (error,
                            G_IO_ERROR,
                            G_IO_ERROR_FAILED,
-                           _("First token of line %d of the keyring at '%s' with content '%s' is malformed"),
+                           _("First token of line %d of the keyring at “%s” with content “%s” is malformed"),
                            n + 1,
                            path,
                            line);
@@ -739,14 +745,13 @@ keyring_generate_entry (const gchar  *cookie_context,
               g_set_error (error,
                            G_IO_ERROR,
                            G_IO_ERROR_FAILED,
-                           _("Second token of line %d of the keyring at '%s' with content '%s' is malformed"),
+                           _("Second token of line %d of the keyring at “%s” with content “%s” is malformed"),
                            n + 1,
                            path,
                            line);
               g_strfreev (tokens);
               goto out;
             }
-          line_when = line_when; /* To avoid -Wunused-but-set-variable */
 
 
           /* D-Bus spec says:
@@ -875,7 +880,7 @@ keyring_generate_entry (const gchar  *cookie_context,
               else
                 {
                   g_prefix_error (error,
-                                  _("(Additionally, releasing the lock for '%s' also failed: %s) "),
+                                  _("(Additionally, releasing the lock for “%s” also failed: %s) "),
                                   path,
                                   local_error->message);
                 }

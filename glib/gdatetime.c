@@ -15,15 +15,14 @@
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
  * License for more details.
  *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301
- * USA.
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, see <http://www.gnu.org/licenses/>.
  *
  * Authors: Christian Hergert <chris@dronelabs.com>
  *          Thiago Santos <thiago.sousa.santos@collabora.co.uk>
  *          Emmanuele Bassi <ebassi@linux.intel.com>
  *          Ryan Lortie <desrt@desrt.ca>
+ *          Robert Ancell <robert.ancell@canonical.com>
  */
 
 /* Algorithms within this file are based on the Calendar FAQ by
@@ -130,7 +129,9 @@ struct _GDateTime
 #define INSTANT_TO_UNIX(instant) \
   ((instant)/USEC_PER_SECOND - UNIX_EPOCH_START * SEC_PER_DAY)
 #define UNIX_TO_INSTANT(unix) \
-  (((unix) + UNIX_EPOCH_START * SEC_PER_DAY) * USEC_PER_SECOND)
+  (((gint64) (unix) + UNIX_EPOCH_START * SEC_PER_DAY) * USEC_PER_SECOND)
+#define UNIX_TO_INSTANT_IS_VALID(unix) \
+  ((gint64) (unix) <= INSTANT_TO_UNIX (G_MAXINT64))
 
 #define DAYS_IN_4YEARS    1461    /* days in 4 years */
 #define DAYS_IN_100YEARS  36524   /* days in 100 years */
@@ -174,7 +175,6 @@ static const guint16 days_in_year[2][13] =
 #define PREFERRED_DATE_TIME_FMT nl_langinfo (D_T_FMT)
 #define PREFERRED_DATE_FMT nl_langinfo (D_FMT)
 #define PREFERRED_TIME_FMT nl_langinfo (T_FMT)
-#define PREFERRED_TIME_FMT nl_langinfo (T_FMT)
 #define PREFERRED_12HR_TIME_FMT nl_langinfo (T_FMT_AMPM)
 
 static const gint weekday_item[2][7] =
@@ -196,11 +196,7 @@ static const gint month_item[2][12] =
 
 #else
 
-#define GET_AMPM(d)          ((g_date_time_get_hour (d) < 12)  \
-                                       /* Translators: 'before midday' indicator */ \
-                                ? C_("GDateTime", "AM") \
-                                  /* Translators: 'after midday' indicator */ \
-                                : C_("GDateTime", "PM"))
+#define GET_AMPM(d)          (get_fallback_ampm (g_date_time_get_hour (d)))
 
 /* Translators: this is the preferred format for expressing the date and the time */
 #define PREFERRED_DATE_TIME_FMT C_("GDateTime", "%a %b %e %H:%M:%S %Y")
@@ -348,6 +344,18 @@ get_weekday_name_abbr (gint day)
 }
 
 #endif  /* HAVE_LANGINFO_TIME */
+
+/* Format AM/PM indicator if the locale does not have a localized version. */
+static const gchar *
+get_fallback_ampm (gint hour)
+{
+  if (hour < 12)
+    /* Translators: 'before midday' indicator */
+    return C_("GDateTime", "AM");
+  else
+    /* Translators: 'after midday' indicator */
+    return C_("GDateTime", "PM");
+}
 
 static inline gint
 ymd_to_days (gint year,
@@ -644,6 +652,10 @@ static GDateTime *
 g_date_time_new_from_timeval (GTimeZone      *tz,
                               const GTimeVal *tv)
 {
+  if ((gint64) tv->tv_sec > G_MAXINT64 - 1 ||
+      !UNIX_TO_INSTANT_IS_VALID ((gint64) tv->tv_sec + 1))
+    return NULL;
+
   return g_date_time_from_instant (tz, tv->tv_usec +
                                    UNIX_TO_INSTANT (tv->tv_sec));
 }
@@ -673,6 +685,9 @@ static GDateTime *
 g_date_time_new_from_unix (GTimeZone *tz,
                            gint64     secs)
 {
+  if (!UNIX_TO_INSTANT_IS_VALID (secs))
+    return NULL;
+
   return g_date_time_from_instant (tz, UNIX_TO_INSTANT (secs));
 }
 
@@ -887,6 +902,342 @@ g_date_time_new_from_timeval_utc (const GTimeVal *tv)
   return datetime;
 }
 
+/* Parse integers in the form d (week days), dd (hours etc), ddd (ordinal days) or dddd (years) */
+static gboolean
+get_iso8601_int (const gchar *text, gsize length, gint *value)
+{
+  gint i, v = 0;
+
+  if (length < 1 || length > 4)
+    return FALSE;
+
+  for (i = 0; i < length; i++)
+    {
+      const gchar c = text[i];
+      if (c < '0' || c > '9')
+        return FALSE;
+      v = v * 10 + (c - '0');
+    }
+
+  *value = v;
+  return TRUE;
+}
+
+/* Parse seconds in the form ss or ss.sss (variable length decimal) */
+static gboolean
+get_iso8601_seconds (const gchar *text, gsize length, gdouble *value)
+{
+  gint i;
+  gdouble multiplier = 0.1, v = 0;
+
+  if (length < 2)
+    return FALSE;
+
+  for (i = 0; i < 2; i++)
+    {
+      const gchar c = text[i];
+      if (c < '0' || c > '9')
+        return FALSE;
+      v = v * 10 + (c - '0');
+    }
+
+  if (length > 2 && !(text[i] == '.' || text[i] == ','))
+    return FALSE;
+  i++;
+  if (i == length)
+    return FALSE;
+
+  for (; i < length; i++)
+    {
+      const gchar c = text[i];
+      if (c < '0' || c > '9')
+        return FALSE;
+      v += (c - '0') * multiplier;
+      multiplier *= 0.1;
+    }
+
+  *value = v;
+  return TRUE;
+}
+
+static GDateTime *
+g_date_time_new_ordinal (GTimeZone *tz, gint year, gint ordinal_day, gint hour, gint minute, gdouble seconds)
+{
+  GDateTime *dt;
+
+  if (ordinal_day < 1 || ordinal_day > (GREGORIAN_LEAP (year) ? 366 : 365))
+    return NULL;
+
+  dt = g_date_time_new (tz, year, 1, 1, hour, minute, seconds);
+  dt->days += ordinal_day - 1;
+
+  return dt;
+}
+
+static GDateTime *
+g_date_time_new_week (GTimeZone *tz, gint year, gint week, gint week_day, gint hour, gint minute, gdouble seconds)
+{
+  gint64 p;
+  gint max_week, jan4_week_day, ordinal_day;
+  GDateTime *dt;
+
+  p = (year * 365 + (year / 4) - (year / 100) + (year / 400)) % 7;
+  max_week = p == 4 ? 53 : 52;
+
+  if (week < 1 || week > max_week || week_day < 1 || week_day > 7)
+    return NULL;
+
+  dt = g_date_time_new (tz, year, 1, 4, 0, 0, 0);
+  g_date_time_get_week_number (dt, NULL, &jan4_week_day, NULL);
+  ordinal_day = (week * 7) + week_day - (jan4_week_day + 3);
+  if (ordinal_day < 0)
+    {
+      year--;
+      ordinal_day += GREGORIAN_LEAP (year) ? 366 : 365;
+    }
+  else if (ordinal_day > (GREGORIAN_LEAP (year) ? 366 : 365))
+    {
+      ordinal_day -= (GREGORIAN_LEAP (year) ? 366 : 365);
+      year++;
+    }
+
+  return g_date_time_new_ordinal (tz, year, ordinal_day, hour, minute, seconds);
+}
+
+static GDateTime *
+parse_iso8601_date (const gchar *text, gsize length,
+                    gint hour, gint minute, gdouble seconds, GTimeZone *tz)
+{
+  /* YYYY-MM-DD */
+  if (length == 10 && text[4] == '-' && text[7] == '-')
+    {
+      int year, month, day;
+      if (!get_iso8601_int (text, 4, &year) ||
+          !get_iso8601_int (text + 5, 2, &month) ||
+          !get_iso8601_int (text + 8, 2, &day))
+        return NULL;
+      return g_date_time_new (tz, year, month, day, hour, minute, seconds);
+    }
+  /* YYYY-DDD */
+  else if (length == 8 && text[4] == '-')
+    {
+      gint year, ordinal_day;
+      if (!get_iso8601_int (text, 4, &year) ||
+          !get_iso8601_int (text + 5, 3, &ordinal_day))
+        return NULL;
+      return g_date_time_new_ordinal (tz, year, ordinal_day, hour, minute, seconds);
+    }
+  /* YYYY-Www-D */
+  else if (length == 10 && text[4] == '-' && text[5] == 'W' && text[8] == '-')
+    {
+      gint year, week, week_day;
+      if (!get_iso8601_int (text, 4, &year) ||
+          !get_iso8601_int (text + 6, 2, &week) ||
+          !get_iso8601_int (text + 9, 1, &week_day))
+        return NULL;
+      return g_date_time_new_week (tz, year, week, week_day, hour, minute, seconds);
+    }
+  /* YYYYWwwD */
+  else if (length == 8 && text[4] == 'W')
+    {
+      gint year, week, week_day;
+      if (!get_iso8601_int (text, 4, &year) ||
+          !get_iso8601_int (text + 5, 2, &week) ||
+          !get_iso8601_int (text + 7, 1, &week_day))
+        return NULL;
+      return g_date_time_new_week (tz, year, week, week_day, hour, minute, seconds);
+    }
+  /* YYYYMMDD */
+  else if (length == 8)
+    {
+      int year, month, day;
+      if (!get_iso8601_int (text, 4, &year) ||
+          !get_iso8601_int (text + 4, 2, &month) ||
+          !get_iso8601_int (text + 6, 2, &day))
+        return NULL;
+      return g_date_time_new (tz, year, month, day, hour, minute, seconds);
+    }
+  /* YYYYDDD */
+  else if (length == 7)
+    {
+      gint year, ordinal_day;
+      if (!get_iso8601_int (text, 4, &year) ||
+          !get_iso8601_int (text + 4, 3, &ordinal_day))
+        return NULL;
+      return g_date_time_new_ordinal (tz, year, ordinal_day, hour, minute, seconds);
+    }
+  else
+    return FALSE;
+}
+
+static GTimeZone *
+parse_iso8601_timezone (const gchar *text, gsize length, gssize *tz_offset)
+{
+  gint i, tz_length, offset_sign = 1, offset_hours, offset_minutes;
+  GTimeZone *tz;
+
+  /* UTC uses Z suffix  */
+  if (length > 0 && text[length - 1] == 'Z')
+    {
+      *tz_offset = length - 1;
+      return g_time_zone_new_utc ();
+    }
+
+  /* Look for '+' or '-' of offset */
+  for (i = length - 1; i >= 0; i--)
+    if (text[i] == '+' || text[i] == '-')
+      {
+        offset_sign = text[i] == '-' ? -1 : 1;
+        break;
+      }
+  if (i < 0)
+    return NULL;
+  tz_length = length - i;
+
+  /* +hh:mm or -hh:mm */
+  if (tz_length == 6 && text[i+3] == ':')
+    {
+      if (!get_iso8601_int (text + i + 1, 2, &offset_hours) ||
+          !get_iso8601_int (text + i + 4, 2, &offset_minutes))
+        return NULL;
+    }
+  /* +hhmm or -hhmm */
+  else if (tz_length == 5)
+    {
+      if (!get_iso8601_int (text + i + 1, 2, &offset_hours) ||
+          !get_iso8601_int (text + i + 3, 2, &offset_minutes))
+        return NULL;
+    }
+  /* +hh or -hh */
+  else if (tz_length == 3)
+    {
+      if (!get_iso8601_int (text + i + 1, 2, &offset_hours))
+        return NULL;
+      offset_minutes = 0;
+    }
+  else
+    return NULL;
+
+  *tz_offset = i;
+  tz = g_time_zone_new (text + i);
+
+  /* Double-check that the GTimeZone matches our interpretation of the timezone.
+   * Failure would indicate a bug either here of in the GTimeZone code. */
+  g_assert (g_time_zone_get_offset (tz, 0) == offset_sign * (offset_hours * 3600 + offset_minutes * 60));
+
+  return tz;
+}
+
+static gboolean
+parse_iso8601_time (const gchar *text, gsize length,
+                    gint *hour, gint *minute, gdouble *seconds, GTimeZone **tz)
+{
+  gssize tz_offset = -1;
+
+  /* Check for timezone suffix */
+  *tz = parse_iso8601_timezone (text, length, &tz_offset);
+  if (tz_offset >= 0)
+    length = tz_offset;
+
+  /* hh:mm:ss(.sss) */
+  if (length >= 8 && text[2] == ':' && text[5] == ':')
+    {
+      return get_iso8601_int (text, 2, hour) &&
+             get_iso8601_int (text + 3, 2, minute) &&
+             get_iso8601_seconds (text + 6, length - 6, seconds);
+    }
+  /* hhmmss(.sss) */
+  else if (length >= 6)
+    {
+      return get_iso8601_int (text, 2, hour) &&
+             get_iso8601_int (text + 2, 2, minute) &&
+             get_iso8601_seconds (text + 4, length - 4, seconds);
+    }
+  else
+    return FALSE;
+}
+
+/**
+ * g_date_time_new_from_iso8601:
+ * @text: an ISO 8601 formatted time string.
+ * @default_tz: (nullable): a #GTimeZone to use if the text doesn't contain a
+ *                          timezone, or %NULL.
+ *
+ * Creates a #GDateTime corresponding to the given
+ * [ISO 8601 formatted string](https://en.wikipedia.org/wiki/ISO_8601)
+ * @text. ISO 8601 strings of the form <date><sep><time><tz> are supported.
+ *
+ * <sep> is the separator and can be either 'T', 't' or ' '.
+ *
+ * <date> is in the form:
+ *
+ * - `YYYY-MM-DD` - Year/month/day, e.g. 2016-08-24.
+ * - `YYYYMMDD` - Same as above without dividers.
+ * - `YYYY-DDD` - Ordinal day where DDD is from 001 to 366, e.g. 2016-237.
+ * - `YYYYDDD` - Same as above without dividers.
+ * - `YYYY-Www-D` - Week day where ww is from 01 to 52 and D from 1-7,
+ *   e.g. 2016-W34-3.
+ * - `YYYYWwwD` - Same as above without dividers.
+ *
+ * <time> is in the form:
+ *
+ * - `hh:mm:ss(.sss)` - Hours, minutes, seconds (subseconds), e.g. 22:10:42.123.
+ * - `hhmmss(.sss)` - Same as above without dividers.
+ *
+ * <tz> is an optional timezone suffix of the form:
+ *
+ * - `Z` - UTC.
+ * - `+hh:mm` or `-hh:mm` - Offset from UTC in hours and minutes, e.g. +12:00.
+ * - `+hh` or `-hh` - Offset from UTC in hours, e.g. +12.
+ *
+ * If the timezone is not provided in @text it must be provided in @default_tz
+ * (this field is otherwise ignored).
+ *
+ * This call can fail (returning %NULL) if @text is not a valid ISO 8601
+ * formatted string.
+ *
+ * You should release the return value by calling g_date_time_unref()
+ * when you are done with it.
+ *
+ * Returns: (transfer full) (nullable): a new #GDateTime, or %NULL
+ *
+ * Since: 2.56
+ */
+GDateTime *
+g_date_time_new_from_iso8601 (const gchar *text, GTimeZone *default_tz)
+{
+  gint length, date_length = -1;
+  gint hour = 0, minute = 0;
+  gdouble seconds = 0.0;
+  GTimeZone *tz = NULL;
+  GDateTime *datetime = NULL;
+
+  g_return_val_if_fail (text != NULL, NULL);
+
+  /* Count length of string and find date / time separator ('T', 't', or ' ') */
+  for (length = 0; text[length] != '\0'; length++)
+    {
+      if (date_length < 0 && (text[length] == 'T' || text[length] == 't' || text[length] == ' '))
+        date_length = length;
+    }
+
+  if (date_length < 0)
+    return NULL;
+
+  if (!parse_iso8601_time (text + date_length + 1, length - (date_length + 1),
+                           &hour, &minute, &seconds, &tz))
+    goto out;
+  if (tz == NULL && default_tz == NULL)
+    return NULL;
+
+  datetime = parse_iso8601_date (text, date_length, hour, minute, seconds, tz ? tz : default_tz);
+
+out:
+    if (tz != NULL)
+      g_time_zone_unref (tz);
+    return datetime;
+}
+
 /* full new functions {{{1 */
 
 /**
@@ -943,12 +1294,13 @@ g_date_time_new (GTimeZone *tz,
 {
   GDateTime *datetime;
   gint64 full_time;
+  gint64 usec;
 
   g_return_val_if_fail (tz != NULL, NULL);
 
   if (year < 1 || year > 9999 ||
       month < 1 || month > 12 ||
-      day < 1 || day > 31 ||
+      day < 1 || day > days_in_months[GREGORIAN_LEAP (year)][month] ||
       hour < 0 || hour > 23 ||
       minute < 0 || minute > 59 ||
       seconds < 0.0 || seconds >= 60.0)
@@ -970,10 +1322,20 @@ g_date_time_new (GTimeZone *tz,
                                                 G_TIME_TYPE_STANDARD,
                                                 &full_time);
 
+  /* This is the correct way to convert a scaled FP value to integer.
+   * If this surprises you, please observe that (int)(1.000001 * 1e6)
+   * is 1000000.  This is not a problem with precision, it's just how
+   * FP numbers work.
+   * See https://bugzilla.gnome.org/show_bug.cgi?id=697715. */
+  usec = seconds * USEC_PER_SECOND;
+  if ((usec + 1) * 1e-6 <= seconds) {
+    usec++;
+  }
+
   full_time += UNIX_EPOCH_START * SEC_PER_DAY;
   datetime->days = full_time / SEC_PER_DAY;
   datetime->usec = (full_time % SEC_PER_DAY) * USEC_PER_SECOND;
-  datetime->usec += ((int) (seconds * USEC_PER_SECOND)) % USEC_PER_SECOND;
+  datetime->usec += usec % USEC_PER_SECOND;
 
   return datetime;
 }
@@ -1458,9 +1820,9 @@ g_date_time_equal (gconstpointer dt1,
 /**
  * g_date_time_get_ymd:
  * @datetime: a #GDateTime.
- * @year: (out) (allow-none): the return location for the gregorian year, or %NULL.
- * @month: (out) (allow-none): the return location for the month of the year, or %NULL.
- * @day: (out) (allow-none): the return location for the day of the month, or %NULL.
+ * @year: (out) (optional): the return location for the gregorian year, or %NULL.
+ * @month: (out) (optional): the return location for the month of the year, or %NULL.
+ * @day: (out) (optional): the return location for the day of the month, or %NULL.
  *
  * Retrieves the Gregorian day, month, and year of a given #GDateTime.
  *
@@ -2198,6 +2560,52 @@ format_number (GString  *str,
     g_string_append (str, tmp[--i]);
 }
 
+static gboolean
+format_ampm (GDateTime *datetime,
+             GString   *outstr,
+             gboolean   locale_is_utf8,
+             gboolean   uppercase)
+{
+  const gchar *ampm;
+  gchar       *tmp = NULL, *ampm_dup;
+  gsize        len;
+
+  ampm = GET_AMPM (datetime);
+
+  if (!ampm || ampm[0] == '\0')
+    ampm = get_fallback_ampm (g_date_time_get_hour (datetime));
+
+#if defined (HAVE_LANGINFO_TIME)
+  if (!locale_is_utf8)
+    {
+      /* This assumes that locale encoding can't have embedded NULs */
+      ampm = tmp = g_locale_to_utf8 (ampm, -1, NULL, NULL, NULL);
+      if (!tmp)
+        return FALSE;
+    }
+#endif
+  if (uppercase)
+    ampm_dup = g_utf8_strup (ampm, -1);
+  else
+    ampm_dup = g_utf8_strdown (ampm, -1);
+  len = strlen (ampm_dup);
+  if (!locale_is_utf8)
+    {
+#if defined (HAVE_LANGINFO_TIME)
+      g_free (tmp);
+#endif
+      tmp = g_locale_from_utf8 (ampm_dup, -1, NULL, &len, NULL);
+      g_free (ampm_dup);
+      if (!tmp)
+        return FALSE;
+      ampm_dup = tmp;
+    }
+  g_string_append_len (outstr, ampm_dup, len);
+  g_free (ampm_dup);
+
+  return TRUE;
+}
+
 static gboolean g_date_time_format_locale (GDateTime   *datetime,
 					   const gchar *format,
 					   GString     *outstr,
@@ -2241,11 +2649,12 @@ g_date_time_format_locale (GDateTime   *datetime,
   guint     len;
   guint     colons;
   gchar    *tmp;
+  gsize     tmp_len;
   gunichar  c;
   gboolean  alt_digits = FALSE;
   gboolean  pad_set = FALSE;
   gchar    *pad = "";
-  gchar    *ampm;
+  const gchar *name;
   const gchar *tz;
 
   while (*format)
@@ -2257,10 +2666,10 @@ g_date_time_format_locale (GDateTime   *datetime,
 	    g_string_append_len (outstr, format, len);
 	  else
 	    {
-	      tmp = g_locale_from_utf8 (format, len, NULL, NULL, NULL);
+	      tmp = g_locale_from_utf8 (format, len, NULL, &tmp_len, NULL);
 	      if (!tmp)
 		return FALSE;
-	      g_string_append (outstr, tmp);
+	      g_string_append_len (outstr, tmp, tmp_len);
 	      g_free (tmp);
 	    }
 	}
@@ -2284,19 +2693,85 @@ g_date_time_format_locale (GDateTime   *datetime,
       switch (c)
 	{
 	case 'a':
-	  g_string_append (outstr, WEEKDAY_ABBR (datetime));
+	  name = WEEKDAY_ABBR (datetime);
+          if (g_strcmp0 (name, "") == 0)
+            return FALSE;
+#if !defined (HAVE_LANGINFO_TIME)
+	  if (!locale_is_utf8)
+	    {
+	      tmp = g_locale_from_utf8 (name, -1, NULL, &tmp_len, NULL);
+	      if (!tmp)
+		return FALSE;
+	      g_string_append_len (outstr, tmp, tmp_len);
+	      g_free (tmp);
+	    }
+	  else
+#endif
+	    {
+	      g_string_append (outstr, name);
+	    }
 	  break;
 	case 'A':
-	  g_string_append (outstr, WEEKDAY_FULL (datetime));
+	  name = WEEKDAY_FULL (datetime);
+          if (g_strcmp0 (name, "") == 0)
+            return FALSE;
+#if !defined (HAVE_LANGINFO_TIME)
+	  if (!locale_is_utf8)
+	    {
+	      tmp = g_locale_from_utf8 (name, -1, NULL, &tmp_len, NULL);
+	      if (!tmp)
+		return FALSE;
+	      g_string_append_len (outstr, tmp, tmp_len);
+	      g_free (tmp);
+	    }
+	  else
+#endif
+	    {
+	      g_string_append (outstr, name);
+	    }
 	  break;
 	case 'b':
-	  g_string_append (outstr, MONTH_ABBR (datetime));
+	  name = MONTH_ABBR (datetime);
+          if (g_strcmp0 (name, "") == 0)
+            return FALSE;
+#if !defined (HAVE_LANGINFO_TIME)
+	  if (!locale_is_utf8)
+	    {
+	      tmp = g_locale_from_utf8 (name, -1, NULL, &tmp_len, NULL);
+	      if (!tmp)
+		return FALSE;
+	      g_string_append_len (outstr, tmp, tmp_len);
+	      g_free (tmp);
+	    }
+	  else
+#endif
+	    {
+	      g_string_append (outstr, name);
+	    }
 	  break;
 	case 'B':
-	  g_string_append (outstr, MONTH_FULL (datetime));
+	  name = MONTH_FULL (datetime);
+          if (g_strcmp0 (name, "") == 0)
+            return FALSE;
+#if !defined (HAVE_LANGINFO_TIME)
+	  if (!locale_is_utf8)
+	    {
+	      tmp = g_locale_from_utf8 (name, -1, NULL, &tmp_len, NULL);
+	      if (!tmp)
+		return FALSE;
+	      g_string_append_len (outstr, tmp, tmp_len);
+	      g_free (tmp);
+	    }
+	  else
+#endif
+	    {
+	      g_string_append (outstr, name);
+	    }
 	  break;
 	case 'c':
 	  {
+            if (g_strcmp0 (PREFERRED_DATE_TIME_FMT, "") == 0)
+              return FALSE;
 	    if (!g_date_time_locale_format_locale (datetime, PREFERRED_DATE_TIME_FMT,
 						   outstr, locale_is_utf8))
 	      return FALSE;
@@ -2329,7 +2804,23 @@ g_date_time_format_locale (GDateTime   *datetime,
 			 g_date_time_get_week_numbering_year (datetime));
 	  break;
 	case 'h':
-	  g_string_append (outstr, MONTH_ABBR (datetime));
+	  name = MONTH_ABBR (datetime);
+          if (g_strcmp0 (name, "") == 0)
+            return FALSE;
+#if !defined (HAVE_LANGINFO_TIME)
+	  if (!locale_is_utf8)
+	    {
+	      tmp = g_locale_from_utf8 (name, -1, NULL, &tmp_len, NULL);
+	      if (!tmp)
+		return FALSE;
+	      g_string_append_len (outstr, tmp, tmp_len);
+	      g_free (tmp);
+	    }
+	  else
+#endif
+	    {
+	      g_string_append (outstr, name);
+	    }
 	  break;
 	case 'H':
 	  format_number (outstr, alt_digits, pad_set ? pad : "0", 2,
@@ -2366,49 +2857,17 @@ g_date_time_format_locale (GDateTime   *datetime,
 	  alt_digits = TRUE;
 	  goto next_mod;
 	case 'p':
-	  ampm = (gchar *) GET_AMPM (datetime);
-	  if (!locale_is_utf8)
-	    {
-	      ampm = tmp = g_locale_to_utf8 (ampm, -1, NULL, NULL, NULL);
-	      if (!tmp)
-		return FALSE;
-	    }
-	  ampm = g_utf8_strup (ampm, -1);
-	  if (!locale_is_utf8)
-	    {
-	      g_free (tmp);
-	      tmp = g_locale_from_utf8 (ampm, -1, NULL, NULL, NULL);
-	      g_free (ampm);
-	      if (!tmp)
-		return FALSE;
-	      ampm = tmp;
-	    }
-	  g_string_append (outstr, ampm);
-	  g_free (ampm);
-	  break;
+          if (!format_ampm (datetime, outstr, locale_is_utf8, TRUE))
+            return FALSE;
+          break;
 	case 'P':
-	  ampm = (gchar *) GET_AMPM (datetime);
-	  if (!locale_is_utf8)
-	    {
-	      ampm = tmp = g_locale_to_utf8 (ampm, -1, NULL, NULL, NULL);
-	      if (!tmp)
-		return FALSE;
-	    }
-	  ampm = g_utf8_strdown (ampm, -1);
-	  if (!locale_is_utf8)
-	    {
-	      g_free (tmp);
-	      tmp = g_locale_from_utf8 (ampm, -1, NULL, NULL, NULL);
-	      g_free (ampm);
-	      if (!tmp)
-		return FALSE;
-	      ampm = tmp;
-	    }
-	  g_string_append (outstr, ampm);
-	  g_free (ampm);
+          if (!format_ampm (datetime, outstr, locale_is_utf8, FALSE))
+            return FALSE;
 	  break;
 	case 'r':
 	  {
+            if (g_strcmp0 (PREFERRED_12HR_TIME_FMT, "") == 0)
+              return FALSE;
 	    if (!g_date_time_locale_format_locale (datetime, PREFERRED_12HR_TIME_FMT,
 						   outstr, locale_is_utf8))
 	      return FALSE;
@@ -2449,6 +2908,8 @@ g_date_time_format_locale (GDateTime   *datetime,
 	  break;
 	case 'x':
 	  {
+            if (g_strcmp0 (PREFERRED_DATE_FMT, "") == 0)
+              return FALSE;
 	    if (!g_date_time_locale_format_locale (datetime, PREFERRED_DATE_FMT,
 						   outstr, locale_is_utf8))
 	      return FALSE;
@@ -2456,6 +2917,8 @@ g_date_time_format_locale (GDateTime   *datetime,
 	  break;
 	case 'X':
 	  {
+            if (g_strcmp0 (PREFERRED_TIME_FMT, "") == 0)
+              return FALSE;
 	    if (!g_date_time_locale_format_locale (datetime, PREFERRED_TIME_FMT,
 						   outstr, locale_is_utf8))
 	      return FALSE;
@@ -2472,23 +2935,21 @@ g_date_time_format_locale (GDateTime   *datetime,
 	case 'z':
 	  {
 	    gint64 offset;
-	    if (datetime->tz != NULL)
-	      offset = g_date_time_get_utc_offset (datetime) / USEC_PER_SECOND;
-	    else
-	      offset = 0;
+	    offset = g_date_time_get_utc_offset (datetime) / USEC_PER_SECOND;
 	    if (!format_z (outstr, (int) offset, colons))
 	      return FALSE;
 	  }
 	  break;
 	case 'Z':
 	  tz = g_date_time_get_timezone_abbreviation (datetime);
+	  tmp_len = strlen (tz);
 	  if (!locale_is_utf8)
 	    {
-	      tz = tmp = g_locale_from_utf8 (tz, -1, NULL, NULL, NULL);
+	      tz = tmp = g_locale_from_utf8 (tz, -1, NULL, &tmp_len, NULL);
 	      if (!tmp)
 		return FALSE;
 	    }
-	  g_string_append (outstr, tz);
+	  g_string_append_len (outstr, tz, tmp_len);
 	  if (!locale_is_utf8)
 	    g_free (tmp);
 	  break;
@@ -2615,7 +3076,8 @@ g_date_time_format_locale (GDateTime   *datetime,
  *   for the specifier.
  *
  * Returns: a newly allocated string formatted to the requested format
- *     or %NULL in the case that there was an error. The string
+ *     or %NULL in the case that there was an error (such as a format specifier
+ *     not being supported in the current locale). The string
  *     should be freed with g_free().
  *
  * Since: 2.26

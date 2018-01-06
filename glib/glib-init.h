@@ -1,10 +1,10 @@
 /*
  * Copyright © 2011 Canonical Limited
  *
- * This library is free software; you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as
- * published by the Free Software Foundation; either version 2 of the
- * licence, or (at your option) any later version.
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
  * This library is distributed in the hope that it will be useful, but
  * WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -31,6 +31,7 @@ void g_quark_init (void);
 #ifdef G_OS_WIN32
 #include <windows.h>
 
+void g_thread_win32_process_detach (void);
 void g_thread_win32_thread_detach (void);
 void g_thread_win32_init (void);
 void g_clock_win32_init (void);

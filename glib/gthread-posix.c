@@ -7,7 +7,7 @@
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
+ * version 2.1 of the License, or (at your option) any later version.
  *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -46,6 +46,7 @@
 #include "gmessages.h"
 #include "gstrfuncs.h"
 #include "gmain.h"
+#include "gutils.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -58,9 +59,6 @@
 
 #ifdef HAVE_SCHED_H
 #include <sched.h>
-#endif
-#ifdef HAVE_SYS_PRCTL_H
-#include <sys/prctl.h>
 #endif
 #ifdef G_OS_WIN32
 #include <windows.h>
@@ -77,7 +75,7 @@ g_thread_abort (gint         status,
 {
   fprintf (stderr, "GLib (gthread-posix.c): Unexpected error from C library during '%s': %s.  Aborting.\n",
            function, strerror (status));
-  abort ();
+  g_abort ();
 }
 
 /* {{{1 GMutex */
@@ -248,7 +246,7 @@ g_mutex_unlock (GMutex *mutex)
  * non-recursive.  As such, calling g_mutex_lock() on a #GMutex that has
  * already been locked by the same thread results in undefined behaviour
  * (including but not limited to deadlocks or arbitrary return values).
-
+ *
  * Returns: %TRUE if @mutex could be locked
  */
 gboolean
@@ -540,7 +538,10 @@ g_rw_lock_clear (GRWLock *rw_lock)
 void
 g_rw_lock_writer_lock (GRWLock *rw_lock)
 {
-  pthread_rwlock_wrlock (g_rw_lock_get_impl (rw_lock));
+  int retval = pthread_rwlock_wrlock (g_rw_lock_get_impl (rw_lock));
+
+  if (retval != 0)
+    g_critical ("Failed to get RW lock %p: %s", rw_lock, g_strerror (retval));
 }
 
 /**
@@ -590,14 +591,18 @@ g_rw_lock_writer_unlock (GRWLock *rw_lock)
  * thread will block. Read locks can be taken recursively.
  *
  * It is implementation-defined how many threads are allowed to
- * hold read locks on the same lock simultaneously.
+ * hold read locks on the same lock simultaneously. If the limit is hit,
+ * or if a deadlock is detected, a critical warning will be emitted.
  *
  * Since: 2.32
  */
 void
 g_rw_lock_reader_lock (GRWLock *rw_lock)
 {
-  pthread_rwlock_rdlock (g_rw_lock_get_impl (rw_lock));
+  int retval = pthread_rwlock_rdlock (g_rw_lock_get_impl (rw_lock));
+
+  if (retval != 0)
+    g_critical ("Failed to get RW lock %p: %s", rw_lock, g_strerror (retval));
 }
 
 /**
@@ -946,7 +951,7 @@ g_cond_wait_until (GCond  *cond,
  * A macro to assist with the static initialisation of a #GPrivate.
  *
  * This macro is useful for the case that a #GDestroyNotify function
- * should be associated the key.  This is needed when the key will be
+ * should be associated with the key.  This is needed when the key will be
  * used to point at memory that should be deallocated when the thread
  * exits.
  *
@@ -1227,10 +1232,10 @@ g_system_thread_exit (void)
 void
 g_system_thread_set_name (const gchar *name)
 {
-#if defined(HAVE_SYS_PRCTL_H) && defined(PR_SET_NAME)
-  prctl (PR_SET_NAME, name, 0, 0, 0, 0); /* on Linux */
+#if defined(HAVE_PTHREAD_SETNAME_NP_WITH_TID)
+  pthread_setname_np (pthread_self(), name); /* on Linux and Solaris */
 #elif defined(HAVE_PTHREAD_SETNAME_NP_WITHOUT_TID)
-  pthread_setname_np(name); /* on OS X and iOS */
+  pthread_setname_np (name); /* on OS X and iOS */
 #endif
 }
 
@@ -1299,7 +1304,7 @@ g_mutex_clear (GMutex *mutex)
   if G_UNLIKELY (mutex->i[0] != 0)
     {
       fprintf (stderr, "g_mutex_clear() called on uninitialised or locked mutex\n");
-      abort ();
+      g_abort ();
     }
 }
 
@@ -1325,7 +1330,7 @@ g_mutex_unlock_slowpath (GMutex *mutex,
   if G_UNLIKELY (prev == 0)
     {
       fprintf (stderr, "Attempt to unlock mutex that was not locked\n");
-      abort ();
+      g_abort ();
     }
 
   syscall (__NR_futex, &mutex->i[0], (gsize) FUTEX_WAKE_PRIVATE, (gsize) 1, NULL);

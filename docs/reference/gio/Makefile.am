@@ -1,7 +1,5 @@
 NULL =
 
-SUBDIRS = gdbus-object-manager-example
-
 # The name of the module.
 DOC_MODULE=gio
 
@@ -9,8 +7,9 @@ DOC_MODULE=gio
 DOC_MAIN_SGML_FILE=gio-docs.xml
 
 # Extra options to supply to gtkdoc-scan
-SCAN_OPTIONS=--deprecated-guards="G_DISABLE_DEPRECATED" \
-             --ignore-decorators="G_GNUC_WARN_UNUSED_RESULT"
+SCAN_OPTIONS = \
+	--deprecated-guards="G_DISABLE_DEPRECATED" \
+	--ignore-decorators="GLIB_VAR|G_GNUC_INTERNAL|G_GNUC_WARN_UNUSED_RESULT|GLIB_AVAILABLE_IN_ALL|GLIB_AVAILABLE_IN_2_26|GLIB_AVAILABLE_IN_2_28|GLIB_AVAILABLE_IN_2_30|GLIB_AVAILABLE_IN_2_32|GLIB_AVAILABLE_IN_2_34|GLIB_AVAILABLE_IN_2_36|GLIB_AVAILABLE_IN_2_38|GLIB_AVAILABLE_IN_2_40|GLIB_AVAILABLE_IN_2_42|GLIB_AVAILABLE_IN_2_44|GLIB_AVAILABLE_IN_2_46|GLIB_AVAILABLE_IN_2_48|GLIB_AVAILABLE_IN_2_50|GLIB_AVAILABLE_IN_2_52|GLIB_AVAILABLE_IN_2_54|GLIB_AVAILABLE_IN_2_56|GLIB_DEPRECATED_IN_2_26|GLIB_DEPRECATED_IN_2_26_FOR|GLIB_DEPRECATED_IN_2_28|GLIB_DEPRECATED_IN_2_28_FOR|GLIB_DEPRECATED_IN_2_30|GLIB_DEPRECATED_IN_2_30_FOR|GLIB_DEPRECATED_IN_2_32|GLIB_DEPRECATED_IN_2_32_FOR|GLIB_DEPRECATED_IN_2_34|GLIB_DEPRECATED_IN_2_34_FOR|GLIB_DEPRECATED_IN_2_36|GLIB_DEPRECATED_IN_2_36_FOR|GLIB_DEPRECATED_IN_2_38|GLIB_DEPRECATED_IN_2_38_FOR|GLIB_DEPRECATED_IN_2_40|GLIB_DEPRECATED_IN_2_40_FOR|GLIB_DEPRECATED_IN_2_42|GLIB_DEPRECATED_IN_2_42_FOR|GLIB_DEPRECATED_IN_2_44|GLIB_DEPRECATED_IN_2_44_FOR|GLIB_DEPRECATED_IN_2_46|GLIB_DEPRECATED_IN_2_46_FOR|GLIB_DEPRECATED_IN_2_48|GLIB_DEPRECATED_IN_2_48_FOR|GLIB_DEPRECATED_IN_2_50|GLIB_DEPRECATED_IN_2_50_FOR|GLIB_DEPRECATED_IN_2_52|GLIB_DEPRECATED_IN_2_52_FOR|GLIB_DEPRECATED_IN_2_54|GLIB_DEPRECATED_IN_2_54_FOR|GLIB_DEPRECATED_IN_2_56|GLIB_DEPRECATED_IN_2_56_FOR"
 
 # The directory containing the source code. Relative to $(srcdir)
 DOC_SOURCE_DIR =$(top_srcdir)/gio $(top_builddir)/gio
@@ -53,6 +52,7 @@ IGNORE_HFILES = \
 	gfileattribute-priv.h		\
 	gfileinfo-priv.h		\
 	ghttpproxy.h			\
+	gio_trace.h			\
 	giomodule-priv.h		\
 	gioprivate.h			\
 	giowin32-priv.h			\
@@ -127,22 +127,6 @@ HTML_IMAGES =			\
 	menu-example.png	\
 	menu-model.png
 
-example_files = \
-	gdbus-example-objectmanager.xml \
-	gdbus-example-objectmanager-server.c \
-	gdbus-example-objectmanager-client.c \
-	gdbus-example-objectmanager-generated-org.gtk.GDBus.Example.ObjectManager.Animal.xml \
-	gdbus-example-objectmanager-generated-org.gtk.GDBus.Example.ObjectManager.Cat.xml \
-	$(NULL)
-
-gdbus-example-objectmanager.xml: %: $(top_srcdir)/gio/tests/gdbus-object-manager-example/%
-gdbus-example-objectmanager-server.c: %: $(top_srcdir)/gio/tests/%
-gdbus-example-objectmanager-client.c: %: $(top_srcdir)/gio/tests/%
-gdbus-example-objectmanager-generated-org.gtk.GDBus.Example.ObjectManager.Animal.xml: %: $(top_builddir)/gio/tests/gdbus-object-manager-example/%
-gdbus-example-objectmanager-generated-org.gtk.GDBus.Example.ObjectManager.Cat.xml: %: $(top_builddir)/gio/tests/gdbus-object-manager-example/%
-$(example_files):
-	cp $< $@
-
 content_files =			\
 	version.xml		\
 	overview.xml		\
@@ -158,7 +142,7 @@ content_files =			\
 	gresource.xml		\
 	gdbus.xml		\
 	gdbus-codegen.xml	\
-	$(example_files)	\
+	gio.xml			\
 	$(NULL)
 
 expand_content_files =		\
@@ -186,15 +170,17 @@ man_MANS =
 
 if ENABLE_MAN
 
-man_MANS +=			\
-	gapplication.1		\
-	gio-querymodules.1	\
-	glib-compile-schemas.1	\
+man_MANS +=				\
+	gapplication.1			\
+	gio-querymodules.1		\
+	glib-compile-schemas.1		\
 	glib-compile-resources.1	\
-	gsettings.1		\
-	gresource.1		\
-	gdbus.1			\
-	gdbus-codegen.1
+	gsettings.1			\
+	gresource.1			\
+	gdbus.1				\
+	gdbus-codegen.1			\
+	gio.1				\
+	$(NULL)
 
 XSLTPROC_FLAGS = \
         --nonet \
@@ -210,7 +196,7 @@ XSLTPROC_FLAGS = \
 endif
 
 CLEANFILES ?=
-CLEANFILES += $(man_MANS) $(example_files)
+CLEANFILES += $(man_MANS)
 
 EXTRA_DIST += $(man_MANS)
 

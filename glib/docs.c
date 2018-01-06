@@ -4,7 +4,7 @@
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
- * version 2 of the licence, or (at your option) any later version.
+ * version 2.1 of the License, or (at your option) any later version.
  *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -32,18 +32,20 @@
  *     and portability
  *
  * GLib defines a number of commonly used types, which can be divided
- * into 4 groups:
+ * into several groups:
  * - New types which are not part of standard C (but are defined in
- *   various C standard library header files) - #gboolean, #gsize,
- *   #gssize, #goffset, #gintptr, #guintptr.
+ *   various C standard library header files) — #gboolean, #gssize.
  * - Integer types which are guaranteed to be the same size across
- *   all platforms - #gint8, #guint8, #gint16, #guint16, #gint32,
+ *   all platforms — #gint8, #guint8, #gint16, #guint16, #gint32,
  *   #guint32, #gint64, #guint64.
  * - Types which are easier to use than their standard C counterparts -
  *   #gpointer, #gconstpointer, #guchar, #guint, #gushort, #gulong.
  * - Types which correspond exactly to standard C types, but are
- *   included for completeness - #gchar, #gint, #gshort, #glong,
+ *   included for completeness — #gchar, #gint, #gshort, #glong,
  *   #gfloat, #gdouble.
+ * - Types which correspond exactly to standard C99 types, but are available
+ *   to use even if your compiler does not support C99 — #gsize, #goffset,
+ *   #gintptr, #guintptr.
  *
  * GLib also defines macros for the limits of some of the standard
  * integer and floating point types, as well as macros for suitable
@@ -1850,16 +1852,15 @@
 /**
  * G_INLINE_FUNC:
  *
- * This macro is used to export function prototypes so they can be linked
- * with an external version when no inlining is performed. The file which
- * implements the functions should define %G_IMPLEMENTS_INLINES
- * before including the headers which contain %G_INLINE_FUNC declarations.
- * Since inlining is very compiler-dependent using these macros correctly
- * is very difficult. Their use is strongly discouraged.
+ * This macro used to be used to conditionally define inline functions
+ * in a compatible way before this feature was supported in all
+ * compilers.  These days, GLib requires inlining support from the
+ * compiler, so your GLib-using programs can safely assume that the
+ * "inline" keywork works properly.
  *
- * This macro is often mistaken for a replacement for the inline keyword;
- * inline is already declared in a portable manner in the GLib headers
- * and can be used normally.
+ * Never use this macro anymore.  Just say "static inline".
+ *
+ * Deprecated: 2.48: Use "static inline" instead
  */
 
 /**
@@ -1994,6 +1995,23 @@
  * Expands to __extension__ when gcc is used as the compiler. This simply
  * tells gcc not to warn about the following non-standard code when compiling
  * with the `-pedantic` option.
+ */
+
+/**
+ * G_GNUC_CHECK_VERSION:
+ * @major: major version to check against
+ * @minor: minor version to check against
+ *
+ * Expands to a a check for a compiler with __GNUC__ defined and a version
+ * greater than or equal to the major and minor numbers provided. For example,
+ * the following would only match on compilers such as GCC 4.8 or newer.
+ *
+ * |[<!-- language="C" -->
+ * #if G_GNUC_CHECK_VERSION(4, 8)
+ * #endif
+ * ]|
+ *
+ * Since: 2.42
  */
 
 /**
@@ -2223,8 +2241,9 @@
 /**
  * G_GNUC_PRINTF:
  * @format_idx: the index of the argument corresponding to the
- *     format string (The arguments are numbered from 1)
- * @arg_idx: the index of the first of the format arguments
+ *     format string (the arguments are numbered from 1)
+ * @arg_idx: the index of the first of the format arguments, or 0 if
+ *     there are no format arguments
  *
  * Expands to the GNU C format function attribute if the compiler is gcc.
  * This is used for declaring functions which take a variable number of
@@ -2234,7 +2253,9 @@
  * Place the attribute after the function declaration, just before the
  * semicolon.
  *
- * See the GNU C documentation for more details.
+ * See the
+ * [GNU C documentation](https://gcc.gnu.org/onlinedocs/gcc/Common-Function-Attributes.html#index-Wformat-3288)
+ * for more details.
  *
  * |[<!-- language="C" -->
  * gint g_snprintf (gchar  *string,
@@ -2247,15 +2268,18 @@
 /**
  * G_GNUC_SCANF:
  * @format_idx: the index of the argument corresponding to
- *     the format string (The arguments are numbered from 1)
- * @arg_idx: the index of the first of the format arguments
+ *     the format string (the arguments are numbered from 1)
+ * @arg_idx: the index of the first of the format arguments, or 0 if
+ *     there are no format arguments
  *
  * Expands to the GNU C format function attribute if the compiler is gcc.
  * This is used for declaring functions which take a variable number of
  * arguments, with the same syntax as scanf(). It allows the compiler
  * to type-check the arguments passed to the function.
  *
- * See the GNU C documentation for details.
+ * See the
+ * [GNU C documentation](https://gcc.gnu.org/onlinedocs/gcc/Common-Function-Attributes.html#index-Wformat-3288)
+ * for details.
  */
 
 /**
@@ -2573,14 +2597,70 @@
  *
  *   membuf = g_malloc (8192);
  *
- *   /* Some computation on membuf */
+ *   /<!-- -->* Some computation on membuf *<!-- -->/
  *
- *   /* membuf will be automatically freed here */
+ *   /<!-- -->* membuf will be automatically freed here *<!-- -->/
  *   return TRUE;
  * }
  * ]|
  *
  * Since: 2.44
+ */
+
+/**
+ * g_autolist:
+ * @TypeName: a supported variable type
+ *
+ * Helper to declare a list variable with automatic deep cleanup.
+ *
+ * The list is deeply freed, in a way appropriate to the specified type, when the
+ * variable goes out of scope.  The type must support this.
+ *
+ * This feature is only supported on GCC and clang.  This macro is not
+ * defined on other compilers and should not be used in programs that
+ * are intended to be portable to those compilers.
+ *
+ * This is meant to be used to declare lists of a type with a cleanup
+ * function.  The type of the variable is a GList *.  You
+ * must not add your own '*'.
+ *
+ * This macro can be used to avoid having to do explicit cleanups of
+ * local variables when exiting functions.  It often vastly simplifies
+ * handling of error conditions, removing the need for various tricks
+ * such as 'goto out' or repeating of cleanup code.  It is also helpful
+ * for non-error cases.
+ *
+ * See also g_autoslist(), g_autoptr() and g_steal_pointer().
+ *
+ * Since: 2.56
+ */
+
+/**
+ * g_autoslist:
+ * @TypeName: a supported variable type
+ *
+ * Helper to declare a singly linked list variable with automatic deep cleanup.
+ *
+ * The list is deeply freed, in a way appropriate to the specified type, when the
+ * variable goes out of scope.  The type must support this.
+ *
+ * This feature is only supported on GCC and clang.  This macro is not
+ * defined on other compilers and should not be used in programs that
+ * are intended to be portable to those compilers.
+ *
+ * This is meant to be used to declare lists of a type with a cleanup
+ * function.  The type of the variable is a GSList *.  You
+ * must not add your own '*'.
+ *
+ * This macro can be used to avoid having to do explicit cleanups of
+ * local variables when exiting functions.  It often vastly simplifies
+ * handling of error conditions, removing the need for various tricks
+ * such as 'goto out' or repeating of cleanup code.  It is also helpful
+ * for non-error cases.
+ *
+ * See also g_autolist(), g_autoptr() and g_steal_pointer().
+ *
+ * Since: 2.56
  */
 
 /**

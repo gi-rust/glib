@@ -4,7 +4,7 @@
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
+ * version 2.1 of the License, or (at your option) any later version.
  *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -340,6 +340,35 @@ g_date_free (GDate *date)
   g_return_if_fail (date != NULL);
   
   g_free (date);
+}
+
+/**
+ * g_date_copy:
+ * @date: a #GDate to copy
+ *
+ * Copies a GDate to a newly-allocated GDate. If the input was invalid
+ * (as determined by g_date_valid()), the invalid state will be copied
+ * as is into the new object.
+ *
+ * Returns: (transfer full): a newly-allocated #GDate initialized from @date
+ *
+ * Since: 2.56
+ */
+GDate *
+g_date_copy (const GDate *date)
+{
+  GDate *res;
+  g_return_val_if_fail (date != NULL, NULL);
+
+  if (g_date_valid (date))
+    res = g_date_new_julian (g_date_get_julian (date));
+  else
+    {
+      res = g_date_new ();
+      *res = *date;
+    }
+
+  return res;
 }
 
 /**
@@ -732,7 +761,7 @@ g_date_get_monday_week_of_year (const GDate *d)
  * @date: a #GDate
  *
  * Returns the week of the year during which this date falls, if
- * weeks are understood to being on Sunday. The date must be valid.
+ * weeks are understood to begin on Sunday. The date must be valid.
  * Can return 0 if the day is before the first Sunday of the year.
  *
  * Returns: week number
@@ -2439,6 +2468,9 @@ win32_strftime_helper (const GDate     *d,
  *
  * Returns: number of characters written to the buffer, or 0 the buffer was too small
  */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-nonliteral"
+
 gsize     
 g_date_strftime (gchar       *s, 
                  gsize        slen, 
@@ -2549,3 +2581,5 @@ g_date_strftime (gchar       *s,
   return retval;
 #endif
 }
+
+#pragma GCC diagnostic pop

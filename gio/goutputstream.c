@@ -5,7 +5,7 @@
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
+ * version 2.1 of the License, or (at your option) any later version.
  *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -40,7 +40,10 @@
  * (g_output_stream_flush()). 
  *
  * To copy the content of an input stream to an output stream without 
- * manually handling the reads and writes, use g_output_stream_splice(). 
+ * manually handling the reads and writes, use g_output_stream_splice().
+ *
+ * See the documentation for #GIOStream for details of thread safety of
+ * streaming APIs.
  *
  * All of these functions have async variants too.
  **/
@@ -150,7 +153,7 @@ g_output_stream_init (GOutputStream *stream)
  * @stream: a #GOutputStream.
  * @buffer: (array length=count) (element-type guint8): the buffer containing the data to write. 
  * @count: the number of bytes to write
- * @cancellable: (allow-none): optional cancellable object
+ * @cancellable: (nullable): optional cancellable object
  * @error: location to store the error occurring, or %NULL to ignore
  *
  * Tries to write @count bytes from @buffer into the stream. Will block
@@ -206,7 +209,7 @@ g_output_stream_write (GOutputStream  *stream,
   if (class->write_fn == NULL) 
     {
       g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
-                           _("Output stream doesn't implement write"));
+                           _("Output stream doesn’t implement write"));
       return -1;
     }
   
@@ -231,9 +234,9 @@ g_output_stream_write (GOutputStream  *stream,
  * @stream: a #GOutputStream.
  * @buffer: (array length=count) (element-type guint8): the buffer containing the data to write. 
  * @count: the number of bytes to write
- * @bytes_written: (out): location to store the number of bytes that was 
+ * @bytes_written: (out) (optional): location to store the number of bytes that was
  *     written to the stream
- * @cancellable: (allow-none): optional #GCancellable object, %NULL to ignore.
+ * @cancellable: (nullable): optional #GCancellable object, %NULL to ignore.
  * @error: location to store the error occurring, or %NULL to ignore
  *
  * Tries to write @count bytes from @buffer into the stream. Will block
@@ -299,9 +302,9 @@ g_output_stream_write_all (GOutputStream  *stream,
 /**
  * g_output_stream_printf:
  * @stream: a #GOutputStream.
- * @bytes_written: (out): location to store the number of bytes that was
+ * @bytes_written: (out) (optional): location to store the number of bytes that was
  *     written to the stream
- * @cancellable: (allow-none): optional #GCancellable object, %NULL to ignore.
+ * @cancellable: (nullable): optional #GCancellable object, %NULL to ignore.
  * @error: location to store the error occurring, or %NULL to ignore
  * @format: the format string. See the printf() documentation
  * @...: the parameters to insert into the format string
@@ -345,9 +348,9 @@ g_output_stream_printf (GOutputStream  *stream,
 /**
  * g_output_stream_vprintf:
  * @stream: a #GOutputStream.
- * @bytes_written: (out): location to store the number of bytes that was
+ * @bytes_written: (out) (optional): location to store the number of bytes that was
  *     written to the stream
- * @cancellable: (allow-none): optional #GCancellable object, %NULL to ignore.
+ * @cancellable: (nullable): optional #GCancellable object, %NULL to ignore.
  * @error: location to store the error occurring, or %NULL to ignore
  * @format: the format string. See the printf() documentation
  * @args: the parameters to insert into the format string
@@ -381,7 +384,7 @@ g_output_stream_vprintf (GOutputStream  *stream,
   gboolean  success;
 
   g_return_val_if_fail (G_IS_OUTPUT_STREAM (stream), FALSE);
-  g_return_val_if_fail (cancellable == NULL || G_IS_CANCELLABLE (stream), FALSE);
+  g_return_val_if_fail (cancellable == NULL || G_IS_CANCELLABLE (cancellable), FALSE);
   g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
   g_return_val_if_fail (format != NULL, FALSE);
 
@@ -398,7 +401,7 @@ g_output_stream_vprintf (GOutputStream  *stream,
  * g_output_stream_write_bytes:
  * @stream: a #GOutputStream.
  * @bytes: the #GBytes to write
- * @cancellable: (allow-none): optional cancellable object
+ * @cancellable: (nullable): optional cancellable object
  * @error: location to store the error occurring, or %NULL to ignore
  *
  * A wrapper function for g_output_stream_write() which takes a
@@ -435,7 +438,7 @@ g_output_stream_write_bytes (GOutputStream  *stream,
 /**
  * g_output_stream_flush:
  * @stream: a #GOutputStream.
- * @cancellable: (allow-none): optional cancellable object
+ * @cancellable: (nullable): optional cancellable object
  * @error: location to store the error occurring, or %NULL to ignore
  *
  * Forces a write of all user-space buffered data for the given
@@ -487,7 +490,7 @@ g_output_stream_flush (GOutputStream  *stream,
  * @stream: a #GOutputStream.
  * @source: a #GInputStream.
  * @flags: a set of #GOutputStreamSpliceFlags.
- * @cancellable: (allow-none): optional #GCancellable object, %NULL to ignore.
+ * @cancellable: (nullable): optional #GCancellable object, %NULL to ignore.
  * @error: a #GError location to store the error occurring, or %NULL to
  * ignore.
  *
@@ -554,7 +557,7 @@ g_output_stream_real_splice (GOutputStream             *stream,
   if (class->write_fn == NULL)
     {
       g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
-                           _("Output stream doesn't implement write"));
+                           _("Output stream doesn’t implement write"));
       res = FALSE;
       goto notsupported;
     }
@@ -667,7 +670,7 @@ g_output_stream_internal_close (GOutputStream  *stream,
 /**
  * g_output_stream_close:
  * @stream: A #GOutputStream.
- * @cancellable: (allow-none): optional cancellable object
+ * @cancellable: (nullable): optional cancellable object
  * @error: location to store the error occurring, or %NULL to ignore
  *
  * Closes the stream, releasing resources related to it.
@@ -758,7 +761,7 @@ async_ready_write_callback_wrapper (GObject      *source_object,
  * @buffer: (array length=count) (element-type guint8): the buffer containing the data to write. 
  * @count: the number of bytes to write
  * @io_priority: the io priority of the request.
- * @cancellable: (allow-none): optional #GCancellable object, %NULL to ignore.
+ * @cancellable: (nullable): optional #GCancellable object, %NULL to ignore.
  * @callback: (scope async): callback to call when the request is satisfied
  * @user_data: (closure): the data to pass to callback function
  *
@@ -786,7 +789,7 @@ async_ready_write_callback_wrapper (GObject      *source_object,
  * value) will be executed before an outstanding request with lower 
  * priority. Default priority is %G_PRIORITY_DEFAULT.
  *
- * The asyncronous methods have a default fallback that uses threads 
+ * The asynchronous methods have a default fallback that uses threads
  * to implement asynchronicity, so they are optional for inheriting 
  * classes. However, if you override one you must override all.
  *
@@ -953,7 +956,7 @@ write_all_async_thread (GTask        *task,
  * @buffer: (array length=count) (element-type guint8): the buffer containing the data to write
  * @count: the number of bytes to write
  * @io_priority: the io priority of the request
- * @cancellable: (allow-none): optional #GCancellable object, %NULL to ignore
+ * @cancellable: (nullable): optional #GCancellable object, %NULL to ignore
  * @callback: (scope async): callback to call when the request is satisfied
  * @user_data: (closure): the data to pass to callback function
  *
@@ -995,6 +998,7 @@ g_output_stream_write_all_async (GOutputStream       *stream,
   data->buffer = buffer;
   data->to_write = count;
 
+  g_task_set_source_tag (task, g_output_stream_write_all_async);
   g_task_set_task_data (task, data, free_async_write_all);
   g_task_set_priority (task, io_priority);
 
@@ -1015,7 +1019,7 @@ g_output_stream_write_all_async (GOutputStream       *stream,
  * g_output_stream_write_all_finish:
  * @stream: a #GOutputStream
  * @result: a #GAsyncResult
- * @bytes_written: (out): location to store the number of bytes that was written to the stream
+ * @bytes_written: (out) (optional): location to store the number of bytes that was written to the stream
  * @error: a #GError location to store the error occurring, or %NULL to ignore.
  *
  * Finishes an asynchronous stream write operation started with
@@ -1079,7 +1083,7 @@ write_bytes_callback (GObject      *stream,
  * @stream: A #GOutputStream.
  * @bytes: The bytes to write
  * @io_priority: the io priority of the request.
- * @cancellable: (allow-none): optional #GCancellable object, %NULL to ignore.
+ * @cancellable: (nullable): optional #GCancellable object, %NULL to ignore.
  * @callback: (scope async): callback to call when the request is satisfied
  * @user_data: (closure): the data to pass to callback function
  *
@@ -1112,6 +1116,7 @@ g_output_stream_write_bytes_async (GOutputStream       *stream,
   data = g_bytes_get_data (bytes, &size);
 
   task = g_task_new (stream, cancellable, callback, user_data);
+  g_task_set_source_tag (task, g_output_stream_write_bytes_async);
   g_task_set_task_data (task, g_bytes_ref (bytes),
                         (GDestroyNotify) g_bytes_unref);
 
@@ -1179,7 +1184,7 @@ async_ready_splice_callback_wrapper (GObject      *source_object,
  * @source: a #GInputStream. 
  * @flags: a set of #GOutputStreamSpliceFlags.
  * @io_priority: the io priority of the request.
- * @cancellable: (allow-none): optional #GCancellable object, %NULL to ignore. 
+ * @cancellable: (nullable): optional #GCancellable object, %NULL to ignore. 
  * @callback: (scope async): a #GAsyncReadyCallback. 
  * @user_data: (closure): user data passed to @callback.
  * 
@@ -1295,7 +1300,7 @@ async_ready_flush_callback_wrapper (GObject      *source_object,
  * g_output_stream_flush_async:
  * @stream: a #GOutputStream.
  * @io_priority: the io priority of the request.
- * @cancellable: (allow-none): optional #GCancellable object, %NULL to ignore.
+ * @cancellable: (nullable): optional #GCancellable object, %NULL to ignore.
  * @callback: (scope async): a #GAsyncReadyCallback to call when the request is satisfied
  * @user_data: (closure): the data to pass to callback function
  * 
@@ -1453,7 +1458,7 @@ real_close_async_cb (GObject      *source_object,
  * g_output_stream_close_async:
  * @stream: A #GOutputStream.
  * @io_priority: the io priority of the request.
- * @cancellable: (allow-none): optional cancellable object
+ * @cancellable: (nullable): optional cancellable object
  * @callback: (scope async): callback to call when the request is satisfied
  * @user_data: (closure): the data to pass to callback function
  *
@@ -1464,7 +1469,7 @@ real_close_async_cb (GObject      *source_object,
  *
  * For behaviour details see g_output_stream_close().
  *
- * The asyncronous methods have a default fallback that uses threads 
+ * The asynchronous methods have a default fallback that uses threads
  * to implement asynchronicity, so they are optional for inheriting 
  * classes. However, if you override one you must override all.
  **/
@@ -1619,7 +1624,7 @@ g_output_stream_is_closing (GOutputStream *stream)
  * g_output_stream_has_pending:
  * @stream: a #GOutputStream.
  * 
- * Checks if an ouput stream has pending actions.
+ * Checks if an output stream has pending actions.
  * 
  * Returns: %TRUE if @stream has pending actions. 
  **/
@@ -1688,7 +1693,7 @@ g_output_stream_clear_pending (GOutputStream *stream)
  * g_output_stream_async_write_is_via_threads:
  * @stream: a #GOutputStream.
  *
- * Checks if an ouput stream's write_async function uses threads.
+ * Checks if an output stream's write_async function uses threads.
  *
  * Returns: %TRUE if @stream's write_async function uses threads.
  **/

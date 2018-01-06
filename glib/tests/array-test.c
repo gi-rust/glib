@@ -4,7 +4,7 @@
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
+ * version 2.1 of the License, or (at your option) any later version.
  *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -37,6 +37,64 @@ sum_up (gpointer data,
   gint *sum = (gint *)user_data;
 
   *sum += GPOINTER_TO_INT (data);
+}
+
+/* Check that expanding an array with g_array_set_size() clears the new elements
+ * if @clear_ was specified during construction. */
+static void
+array_new_cleared (void)
+{
+  GArray *garray;
+  gsize i;
+
+  garray = g_array_new (FALSE, TRUE, sizeof (gint));
+  g_assert_cmpuint (garray->len, ==, 0);
+
+  g_array_set_size (garray, 5);
+  g_assert_cmpuint (garray->len, ==, 5);
+
+  for (i = 0; i < 5; i++)
+    g_assert_cmpint (g_array_index (garray, gint, i), ==, 0);
+
+  g_array_unref (garray);
+}
+
+/* As with array_new_cleared(), but with a sized array. */
+static void
+array_new_sized_cleared (void)
+{
+  GArray *garray;
+  gsize i;
+
+  garray = g_array_sized_new (FALSE, TRUE, sizeof (gint), 10);
+  g_assert_cmpuint (garray->len, ==, 0);
+
+  g_array_set_size (garray, 5);
+  g_assert_cmpuint (garray->len, ==, 5);
+
+  for (i = 0; i < 5; i++)
+    g_assert_cmpint (g_array_index (garray, gint, i), ==, 0);
+
+  g_array_unref (garray);
+}
+
+/* Check that a zero-terminated array does actually have a zero terminator. */
+static void
+array_new_zero_terminated (void)
+{
+  GArray *garray;
+  gchar *out_str = NULL;
+
+  garray = g_array_new (TRUE, FALSE, sizeof (gchar));
+  g_assert_cmpuint (garray->len, ==, 0);
+
+  g_array_append_vals (garray, "hello", strlen ("hello"));
+  g_assert_cmpuint (garray->len, ==, 5);
+  g_assert_cmpstr (garray->data, ==, "hello");
+
+  out_str = g_array_free (garray, FALSE);
+  g_assert_cmpstr (out_str, ==, "hello");
+  g_free (out_str);
 }
 
 static void
@@ -167,6 +225,10 @@ array_remove_range (void)
       g_assert_cmpint (prev, <, cur);
       prev = cur;
     }
+
+  /* Ensure the entire array can be cleared, even when empty. */
+  g_array_remove_range (garray, 0, garray->len);
+  g_array_remove_range (garray, 0, garray->len);
 
   g_array_free (garray, TRUE);
 }
@@ -544,6 +606,59 @@ pointer_array_sort_with_data (void)
 }
 
 static void
+pointer_array_find_empty (void)
+{
+  GPtrArray *array;
+  guint idx;
+
+  array = g_ptr_array_new ();
+
+  g_assert_false (g_ptr_array_find (array, "some-value", NULL));  /* NULL index */
+  g_assert_false (g_ptr_array_find (array, "some-value", &idx));  /* non-NULL index */
+  g_assert_false (g_ptr_array_find_with_equal_func (array, "some-value", g_str_equal, NULL));  /* NULL index */
+  g_assert_false (g_ptr_array_find_with_equal_func (array, "some-value", g_str_equal, &idx));  /* non-NULL index */
+
+  g_ptr_array_free (array, TRUE);
+}
+
+static void
+pointer_array_find_non_empty (void)
+{
+  GPtrArray *array;
+  guint idx;
+  const gchar *str_pointer = "static-string";
+
+  array = g_ptr_array_new ();
+
+  g_ptr_array_add (array, "some");
+  g_ptr_array_add (array, "random");
+  g_ptr_array_add (array, "values");
+  g_ptr_array_add (array, "some");
+  g_ptr_array_add (array, "duplicated");
+  g_ptr_array_add (array, (gpointer) str_pointer);
+
+  g_assert_true (g_ptr_array_find_with_equal_func (array, "random", g_str_equal, NULL));  /* NULL index */
+  g_assert_true (g_ptr_array_find_with_equal_func (array, "random", g_str_equal, &idx));  /* non-NULL index */
+  g_assert_cmpuint (idx, ==, 1);
+
+  g_assert_true (g_ptr_array_find_with_equal_func (array, "some", g_str_equal, &idx));  /* duplicate element */
+  g_assert_cmpuint (idx, ==, 0);
+
+  g_assert_false (g_ptr_array_find_with_equal_func (array, "nope", g_str_equal, NULL));
+
+  g_assert_true (g_ptr_array_find_with_equal_func (array, str_pointer, g_str_equal, &idx));
+  g_assert_cmpuint (idx, ==, 5);
+  idx = G_MAXUINT;
+  g_assert_true (g_ptr_array_find_with_equal_func (array, str_pointer, NULL, &idx));  /* NULL equal func */
+  g_assert_cmpuint (idx, ==, 5);
+  idx = G_MAXUINT;
+  g_assert_true (g_ptr_array_find (array, str_pointer, &idx));  /* NULL equal func */
+  g_assert_cmpuint (idx, ==, 5);
+
+  g_ptr_array_free (array, TRUE);
+}
+
+static void
 byte_array_append (void)
 {
   GByteArray *gbarray;
@@ -711,6 +826,10 @@ byte_array_remove_range (void)
       g_assert (gbarray->data[4*i+3] == 'd');
     }
 
+  /* Ensure the entire array can be cleared, even when empty. */
+  g_byte_array_remove_range (gbarray, 0, gbarray->len);
+  g_byte_array_remove_range (gbarray, 0, gbarray->len);
+
   g_byte_array_free (gbarray, TRUE);
 }
 
@@ -826,9 +945,12 @@ main (int argc, char *argv[])
 {
   g_test_init (&argc, &argv, NULL);
 
-  g_test_bug_base ("http://bugs.gnome.org/");
+  g_test_bug_base ("https://bugzilla.gnome.org/");
 
   /* array tests */
+  g_test_add_func ("/array/new/cleared", array_new_cleared);
+  g_test_add_func ("/array/new/sized-cleared", array_new_sized_cleared);
+  g_test_add_func ("/array/new/zero-terminated", array_new_zero_terminated);
   g_test_add_func ("/array/append", array_append);
   g_test_add_func ("/array/prepend", array_prepend);
   g_test_add_func ("/array/remove", array_remove);
@@ -846,6 +968,8 @@ main (int argc, char *argv[])
   g_test_add_func ("/pointerarray/free-func", pointer_array_free_func);
   g_test_add_func ("/pointerarray/sort", pointer_array_sort);
   g_test_add_func ("/pointerarray/sort-with-data", pointer_array_sort_with_data);
+  g_test_add_func ("/pointerarray/find/empty", pointer_array_find_empty);
+  g_test_add_func ("/pointerarray/find/non-empty", pointer_array_find_non_empty);
 
   /* byte arrays */
   g_test_add_func ("/bytearray/append", byte_array_append);
