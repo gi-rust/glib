@@ -94,6 +94,31 @@ _g_charset_get_aliases (const char *canonical_name)
 }
 
 static gboolean
+charset_is_utf8 (const char *charset)
+{
+  gsize len;
+
+  if (charset == NULL)
+    return FALSE;
+
+  /* In older revisions of the library, UTF-8 was detected
+   * by searching "UTF-8" as a substring in the charset name.
+   * That did not work when the name is "utf-8" (e.g. on Mac OS X) and was
+   * a bit too loose, so it was changed to a case-insensitive match for
+   * "UTF-8" as a suffix of the charset string, sans the optional modifier
+   * suffix starting with "@".
+   * This avoids breakage on platforms without <langinfo.h> where
+   * either an X/Open-like locale format or the bare charset name is used
+   * to specify the locale charset and no mapping via charset.alias is
+   * available. Other locale names containing "UTF-8" are deemed unlikely.
+   */
+  len = strcspn (charset, "@");
+  if (len < 5)
+    return FALSE;
+  return g_ascii_strncasecmp (charset + len - 5, "UTF-8", 5) == 0;
+}
+
+static gboolean
 g_utf8_get_charset_internal (const char  *raw_data,
                              const char **a)
 {
@@ -103,10 +128,7 @@ g_utf8_get_charset_internal (const char  *raw_data,
     {
       *a = charset;
 
-      if (charset && strstr (charset, "UTF-8"))
-        return TRUE;
-      else
-        return FALSE;
+      return charset_is_utf8 (charset);
     }
 
   /* The libcharset code tries to be thread-safe without
@@ -121,10 +143,7 @@ g_utf8_get_charset_internal (const char  *raw_data,
     {
       *a = charset;
 
-      if (charset && strstr (charset, "UTF-8"))
-        return TRUE;
-      else
-        return FALSE;
+      return charset_is_utf8 (charset);
     }
 
   /* Assume this for compatibility at present.  */

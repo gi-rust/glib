@@ -1032,7 +1032,7 @@ g_get_filename_charsets (const gchar ***filename_charsets)
       if (p != NULL && p[0] != '\0') 
 	{
 	  cache->filename_charsets = g_strsplit (p, ",", 0);
-	  cache->is_utf8 = (strcmp (cache->filename_charsets[0], "UTF-8") == 0);
+	  cache->is_utf8 = (g_ascii_strcasecmp (cache->filename_charsets[0], "UTF-8") == 0);
 
 	  for (i = 0; cache->filename_charsets[i]; i++)
 	    {
