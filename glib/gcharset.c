@@ -96,7 +96,9 @@ _g_charset_get_aliases (const char *canonical_name)
 static gboolean
 charset_is_utf8 (const char *charset)
 {
-  gsize len;
+  const gsize pattern_len = strlen ("UTF-8");
+  const char *dot;
+  gsize name_len;
 
   if (charset == NULL)
     return FALSE;
@@ -105,17 +107,30 @@ charset_is_utf8 (const char *charset)
    * by searching "UTF-8" as a substring in the charset name.
    * That did not work when the name is "utf-8" (e.g. on Mac OS X) and was
    * a bit too loose, so it was changed to a case-insensitive match for
-   * "UTF-8" as a suffix of the charset string, sans the optional modifier
-   * suffix starting with "@".
+   * "UTF-8", optionally prepended with a prefix ending in ".", and
+   * optionally followed by a suffix starting with "@".
    * This avoids breakage on platforms without <langinfo.h> where
    * either an X/Open-like locale format or the bare charset name is used
    * to specify the locale charset and no mapping via charset.alias is
    * available. Other locale names containing "UTF-8" are deemed unlikely.
+   *
+   * Examples of charset specifications that are recognized as UTF-8:
+   * - "utf-8"
+   * - "ru_RU.UTF-8"
+   * - "en.UTF-8@we_really_like_kinky_modifiers"
+   * - "Utf-8@blah"
+   *
+   * Examples of charset specifications that are no longer recognized as UTF-8:
+   * - "X-Modified-UTF-8"
+   * - "ISO-8859-1@UTF-8;this_is_how_I_pwn_glib"
    */
-  len = strcspn (charset, "@");
-  if (len < 5)
+  dot = strchr (charset, '.');
+  if (dot != NULL)
+    charset = dot + 1;
+  name_len = strcspn (charset, "@");
+  if (name_len < pattern_len)
     return FALSE;
-  return g_ascii_strncasecmp (charset + len - 5, "UTF-8", 5) == 0;
+  return g_ascii_strncasecmp (charset, "UTF-8", pattern_len) == 0;
 }
 
 static gboolean
