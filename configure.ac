@@ -124,11 +124,11 @@ LIB_EXE_MACHINE_FLAG=X86
 case "$host" in
   *-*-mingw*)
     glib_native_win32=yes
-    glib_dir_separator='\\'
-    glib_searchpath_separator=';'
     glib_pid_type='void *'
     glib_pid_format='p'
     glib_pollfd_format='%#x'
+    glib_dir_separator='\\\\'
+    glib_searchpath_separator=';'
     glib_cv_stack_grows=no
     # Unfortunately the mingw implementations of C99-style snprintf and vsnprintf
     # don't seem to be quite good enough, at least not in mingw-runtime-3.14.
@@ -150,11 +150,11 @@ case "$host" in
     ;;
   *)
     glib_native_win32=no
-    glib_dir_separator='/'
-    glib_searchpath_separator=':'
     glib_pid_type=int
     glib_pid_format='i'
     glib_pollfd_format='%d'
+    glib_dir_separator='/'
+    glib_searchpath_separator=':'
     ;;
 esac
 case $host in
@@ -1016,6 +1016,7 @@ AS_IF([test $glib_native_win32 = yes], [
 				        [AC_MSG_ERROR(Could not find socket())]))
   save_libs="$LIBS"
   LIBS="$LIBS $NETWORK_LIBS"
+
   AC_MSG_CHECKING([for res_init])
   AC_TRY_LINK([#include <sys/types.h>
 	       #include <netinet/in.h>
@@ -1025,6 +1026,54 @@ AS_IF([test $glib_native_win32 = yes], [
 	       res_init();
               ],[AC_MSG_RESULT([yes])
 	         AC_DEFINE(HAVE_RES_INIT, 1, [Define to 1 if you have the 'res_init' function.])
+	      ],[AC_MSG_RESULT([no])])
+
+  AC_MSG_CHECKING([for res_nclose])
+  AC_TRY_LINK([#include <sys/types.h>
+	       #include <netinet/in.h>
+	       #include <arpa/nameser.h>
+	       #include <resolv.h>
+              ],[
+               struct __res_state res;
+	       res_nclose(&res);
+              ],[AC_MSG_RESULT([yes])
+	         AC_DEFINE(HAVE_RES_NCLOSE, 1, [Define to 1 if you have the 'res_nclose' function.])
+	      ],[AC_MSG_RESULT([no])])
+
+  AC_MSG_CHECKING([for res_ndestroy])
+  AC_TRY_LINK([#include <sys/types.h>
+	       #include <netinet/in.h>
+	       #include <arpa/nameser.h>
+	       #include <resolv.h>
+              ],[
+               struct __res_state res;
+	       res_ndestroy(&res);
+              ],[AC_MSG_RESULT([yes])
+	         AC_DEFINE(HAVE_RES_NDESTROY, 1, [Define to 1 if you have the 'res_ndestroy' function.])
+	      ],[AC_MSG_RESULT([no])])
+
+  AC_MSG_CHECKING([for res_ninit])
+  AC_TRY_LINK([#include <sys/types.h>
+	       #include <netinet/in.h>
+	       #include <arpa/nameser.h>
+	       #include <resolv.h>
+              ],[
+               struct __res_state res;
+	       res_ninit(&res);
+              ],[AC_MSG_RESULT([yes])
+	         AC_DEFINE(HAVE_RES_NINIT, 1, [Define to 1 if you have the 'res_ninit' function.])
+	      ],[AC_MSG_RESULT([no])])
+
+  AC_MSG_CHECKING([for res_nquery])
+  AC_TRY_LINK([#include <sys/types.h>
+	       #include <netinet/in.h>
+	       #include <arpa/nameser.h>
+	       #include <resolv.h>
+              ],[
+               struct __res_state res;
+	       res_nquery(&res, "test", 0, 0, (void *)0, 0);
+              ],[AC_MSG_RESULT([yes])
+	         AC_DEFINE(HAVE_RES_NQUERY, 1, [Define to 1 if you have the 'res_nquery' function.])
 	      ],[AC_MSG_RESULT([no])])
   LIBS="$save_libs"
 ])
@@ -2634,6 +2683,14 @@ AS_IF([ test "x$use_gcov" = "xyes"], [
   LDFLAGS="$LDFLAGS -lgcov"
 ])
 
+dnl *******************************
+dnl *** Disable strict aliasing ***
+dnl *******************************
+dnl See https://bugzilla.gnome.org/show_bug.cgi?id=791622
+AS_IF([test "${GCC}" = "yes"],[
+  CFLAGS="$CFLAGS -fno-strict-aliasing"
+])
+
 dnl ******************************
 dnl *** output the whole stuff ***
 dnl ******************************
@@ -3217,9 +3274,10 @@ g_atomic_lock_free="$glib_cv_g_atomic_lock_free"
 g_memory_barrier_needed="$glib_memory_barrier_needed"
 g_gcc_atomic_ops="$glib_cv_gcc_has_builtin_atomic_operations"
 
+g_module_suffix="$glib_gmodule_suffix"
 g_dir_separator="$glib_dir_separator"
 g_searchpath_separator="$glib_searchpath_separator"
-g_module_suffix="$glib_gmodule_suffix"
+
 g_pid_type="$glib_pid_type"
 g_pid_format="\"$glib_pid_format\""
 g_pollfd_format="\"$glib_pollfd_format\""
@@ -3507,6 +3565,8 @@ tests/refcount/Makefile
 m4macros/Makefile
 ])
 
+# We need this command because the configure script will not preserve
+# the same attributes of the template files
 AC_CONFIG_COMMANDS([chmod-scripts],
 [chmod 0755 glib-zip
 chmod 0755 glib-gettextize
